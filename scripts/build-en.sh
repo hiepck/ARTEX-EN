@@ -25,7 +25,9 @@ docker run --rm ${RUNAS} -e HOME=/tmp \
   "$NODE_IMAGE" bash -c "npm ci --no-audit --no-fund && npm run build:static"
 
 echo "==> [2/4] Staging embedded UI (web/out -> server/webui/dist)"
+# server/webui is a build-artifact dir (gitignored), so its parent must exist first.
 rm -rf server/webui/dist
+mkdir -p server/webui
 cp -r web/out server/webui/dist
 
 echo "==> [3/4] Building Go binary (linux/${ARCH}) in ${GO_IMAGE}"
