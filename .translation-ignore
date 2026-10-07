@@ -1,0 +1,35 @@
+# Files where Chinese characters are INTENTIONAL data, not untranslated text.
+# scripts/sync-upstream.sh skips hits in these exact paths when scanning.
+# One repo-relative path per line. Review this list whenever upstream adds a new
+# "data-in-Chinese" pattern; everything NOT listed here is reported for translation.
+#
+# --- Historical changelog kept in Chinese by convention of this fork ---
+CHANGELOG.md
+# --- README documents the legacy [模型] reason prefix ---
+README.md
+# --- ICP filing numbers (京ICP备...) are Chinese by definition: parsing logic + fixtures ---
+db/company_scope.go
+db/company_scope_test.go
+db/task_assets_test.go
+server/assets_scope_test.go
+agent/blackboard_inheritance_test.go
+web/src/lib/company-scope.ts
+web/src/components/scope-text-editor.tsx
+web/src/lib/mock/data.ts
+web/src/app/(main)/function/tasks/detail/_tabs/overview-tab.tsx
+# --- Legacy "[模型]" reason prefix must keep matching pre-translation history ---
+db/intercept.go
+db/task_archives_restore.go
+db/schema.sql
+web/src/components/approval-records.tsx
+# --- Detection patterns for Chinese LLM-provider error messages (余额不足 etc.) ---
+agent/provider.go
+agent/provider_quota_test.go
+server/task_llm_test.go
+# --- CJK password fixtures (rune-vs-byte counting tests) ---
+server/auth_test.go
+# --- CJK/GBK zip-entry filename fixtures (encoding tests) ---
+server/skill_upload_test.go
+# --- Chinese "not logged in" detection regexes for CN websites ---
+skills/api-recon/scripts/preload.js
+skills/api-recon/reference.md

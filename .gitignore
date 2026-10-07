@@ -67,3 +67,5 @@ docker-compose.override.yml
 /bench/
 /Dockerfile.bench
 /Dockerfile.bench.v2
+# Static export of the web UI (build artifact, embedded into the Go binary)
+/web/out/
