@@ -69,3 +69,6 @@ docker-compose.override.yml
 /Dockerfile.bench.v2
 # Static export of the web UI (build artifact, embedded into the Go binary)
 /web/out/
+
+# Containerized build caches (scripts/build-en.sh)
+/.build-cache/
