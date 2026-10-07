@@ -22,6 +22,12 @@ var schemaSQL string
 
 const schemaMigrationLockKey int64 = 7337741001
 
+// maxOpenConns is the connection-pool cap; see the comment in Open. The value is
+// far below PostgreSQL's default max_connections=100, yet far above the app's own
+// nested connection-acquisition depth (during startup the schema advisory lock
+// holds one connection while seedBuiltins grabs another), so it cannot self-lock.
+const maxOpenConns = 32
+
 var schemaDeadlockRetryDelays = [...]time.Duration{
 	100 * time.Millisecond,
 	250 * time.Millisecond,
@@ -133,6 +139,19 @@ func Open(dsn string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	// database/sql places no connection limit by default: with no idle connection
+	// in the pool it opens new ones unconditionally, all the way until PostgreSQL's
+	// max_connections (default 100) rejects them, so peak-time queries fail with
+	// errors like `FATAL: sorry, too many clients already`. With the cap in place,
+	// excess queries queue for an idle connection instead — under the same load
+	// they get slower rather than erroring, and callers no longer have to tell
+	// "could not read" apart from "does not exist". maxOpenConns must leave headroom
+	// for psql / reset-password.sh and any coexisting instances; if max_connections
+	// was ever lowered, lower this value to match.
+	sqlDB.SetMaxOpenConns(maxOpenConns)
+	sqlDB.SetMaxIdleConns(maxOpenConns)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
 	if err := sqlDB.Ping(); err != nil {
 		sqlDB.Close()
 		return nil, fmt.Errorf("ping postgres (%s): %w", config.Redact(dsn), err)

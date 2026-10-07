@@ -17,13 +17,22 @@ export default function SetupPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
+  // When the initialization status cannot be fetched we must not default to
+  // treating the instance as "uninitialized" — that would show the setup form on
+  // an instance that already has a password, and a user filling it in would
+  // overwrite it. Close the entry instead.
+  const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
-    api.authStatus()
+    api
+      .authStatus()
       .then(({ initialized }) => {
         if (initialized) router.replace("/login");
       })
-      .catch(() => setError("The backend service could not be reached"))
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "The backend service could not be reached");
+        setUnavailable(true);
+      })
       .finally(() => setChecking(false));
   }, [router]);
 
@@ -61,13 +70,7 @@ export default function SetupPage() {
           <div className="absolute size-60 rounded-full border border-primary-foreground/15" />
           <div className="absolute size-40 rounded-full border border-primary-foreground/20" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo.png"
-            alt="ARTEX"
-            width={160}
-            height={160}
-            className="relative brightness-0 invert"
-          />
+          <img src="/logo.png" alt="ARTEX" width={160} height={160} className="relative brightness-0 invert" />
         </div>
       </div>
 
@@ -75,38 +78,51 @@ export default function SetupPage() {
       <div className="flex w-full items-center justify-center bg-background p-8 lg:w-2/3">
         <div className="w-full max-w-md space-y-10 py-24 lg:py-32">
           <div className="space-y-4 text-center">
-            <h2 className="text-2xl font-medium tracking-tight">Set the password</h2>
-            <p className="mx-auto max-w-xl text-muted-foreground">This is the first run of ARTEX; set a login password for the account (at least 8 characters)</p>
+            <h2 className="text-2xl font-medium tracking-tight">{unavailable ? "Cannot confirm initialization status" : "Set the password"}</h2>
+            <p className="mx-auto max-w-xl text-muted-foreground">
+              {unavailable
+                ? "The backend or database is temporarily unavailable. To avoid overwriting the password that already exists on this instance, the setup entry has been temporarily disabled — please restore the service and try again."
+                : "This is the first run of ARTEX; set a login password for the account (at least 8 characters)"}
+            </p>
           </div>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="password">New password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="at least 8 characters"
-                autoFocus
-                autoComplete="new-password"
-              />
+          {unavailable ? (
+            <div className="flex flex-col gap-4">
+              {error && <p className="text-center text-sm text-destructive">{error}</p>}
+              <Button type="button" className="w-full" onClick={() => window.location.reload()}>
+                Retry
+              </Button>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="confirm">Confirm the password</Label>
-              <Input
-                id="confirm"
-                type="password"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                placeholder="Type the password again"
-                autoComplete="new-password"
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading || !password || !confirm}>
-              {loading ? "Saving..." : "Set the password and sign in"}
-            </Button>
-          </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="password">New password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="at least 8 characters"
+                  autoFocus
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="confirm">Confirm the password</Label>
+                <Input
+                  id="confirm"
+                  type="password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="Type the password again"
+                  autoComplete="new-password"
+                />
+              </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <Button type="submit" className="w-full" disabled={loading || !password || !confirm}>
+                {loading ? "Saving..." : "Set the password and sign in"}
+              </Button>
+            </form>
+          )}
         </div>
       </div>
     </div>

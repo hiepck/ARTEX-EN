@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -20,7 +21,29 @@ const (
 	authPassKey    = "auth.password_hash"
 	jwtTTL         = 7 * 24 * time.Hour
 	keyChars       = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+	// 下限与 setup 页的前端校验一致——校验只放在前端等于没放，直接打 API 就能
+	// 绕过。上限是 bcrypt 的硬限制：超过 72 字节 GenerateFromPassword 会返回
+	// ErrPasswordTooLong，提前挡掉好过让用户收到一句含义不明的「密码加密失败」。
+	minPasswordRunes = 8
+	maxPasswordBytes = 72
 )
+
+// errDataSourceUnavailable 是密码相关读操作失败时统一的回复。这些 handler 绝不能
+// 把"读不到"当成"没有设置"：authInit 曾因此在数据库报错时放行，让未认证请求覆盖
+// 掉已有的管理员密码。
+const errDataSourceUnavailable = "数据源暂时不可用，请稍后重试"
+
+// validatePassword 返回空串表示通过，否则返回可直接展示给用户的中文原因。
+func validatePassword(pw string) string {
+	if utf8.RuneCountInString(pw) < minPasswordRunes {
+		return fmt.Sprintf("密码长度至少 %d 位", minPasswordRunes)
+	}
+	if len(pw) > maxPasswordBytes {
+		return fmt.Sprintf("密码长度不能超过 %d 字节", maxPasswordBytes)
+	}
+	return ""
+}
 
 // loadOrCreateJWTKey reads the 32-byte signing key from keyDir/jwt.key. keyDir is
 // the project base dir (next to the executable), NOT the browsable workspace root
@@ -115,12 +138,19 @@ func (s *Server) requireAuth(h http.Handler) http.Handler {
 }
 
 // GET /api/auth/status — reports whether the admin password has been initialised.
+// 读失败必须回 503 而不是 initialized:false：前端在 initialized:false 时会把用户
+// 送到 /setup 去设置密码（login/page.tsx），把数据库故障包装成 200 等于把用户往
+// 覆盖已有密码的路上推。
 func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 	pg := s.pg(w)
 	if pg == nil {
 		return
 	}
-	hash, _, _ := pg.GetSetting(authPassKey)
+	hash, _, err := pg.GetSetting(authPassKey)
+	if err != nil {
+		writeErr(w, 503, errDataSourceUnavailable)
+		return
+	}
 	writeJSON(w, 200, map[string]any{"initialized": hash != ""})
 }
 
@@ -130,7 +160,11 @@ func (s *Server) authInit(w http.ResponseWriter, r *http.Request) {
 	if pg == nil {
 		return
 	}
-	existing, _, _ := pg.GetSetting(authPassKey)
+	existing, _, err := pg.GetSetting(authPassKey)
+	if err != nil {
+		writeErr(w, 503, errDataSourceUnavailable)
+		return
+	}
 	if existing != "" {
 		writeErr(w, 403, "the password is already set")
 		return
@@ -142,13 +176,27 @@ func (s *Server) authInit(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "the password must not be empty")
 		return
 	}
+	if msg := validatePassword(req.Password); msg != "" {
+		writeErr(w, 400, msg)
+		return
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		writeErr(w, 500, "failed to hash the password")
 		return
 	}
-	if err := pg.SetSetting(authPassKey, string(hash)); err != nil {
+	// Use INSERT ... ON CONFLICT DO NOTHING instead of an upsert: the GetSetting
+	// call above is only a fast-fail path; the real "settable on first run only"
+	// guarantee rests on the primary-key constraint. bcrypt takes tens of
+	// milliseconds, during which another request may well set the password first,
+	// and the read check itself may also fail.
+	inserted, err := pg.InsertSettingIfAbsent(authPassKey, string(hash))
+	if err != nil {
 		writeErr(w, 500, "failed to save: "+err.Error())
+		return
+	}
+	if !inserted {
+		writeErr(w, 403, "password already set")
 		return
 	}
 	tok, err := signJWT(s.jwtKey)
@@ -183,7 +231,15 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "the new password must not be empty")
 		return
 	}
-	hash, ok, _ := pg.GetSetting(authPassKey)
+	if msg := validatePassword(req.NewPassword); msg != "" {
+		writeErr(w, 400, msg)
+		return
+	}
+	hash, ok, err := pg.GetSetting(authPassKey)
+	if err != nil {
+		writeErr(w, 503, errDataSourceUnavailable)
+		return
+	}
 	if !ok || hash == "" {
 		writeErr(w, 403, "the password is not initialized, set one first")
 		return
@@ -222,7 +278,11 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 401, "wrong username or password")
 		return
 	}
-	hash, ok, _ := pg.GetSetting(authPassKey)
+	hash, ok, err := pg.GetSetting(authPassKey)
+	if err != nil {
+		writeErr(w, 503, errDataSourceUnavailable)
+		return
+	}
 	if !ok || hash == "" {
 		writeErr(w, 403, "the password is not initialized, set one first")
 		return
