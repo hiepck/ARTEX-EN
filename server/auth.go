@@ -22,25 +22,29 @@ const (
 	jwtTTL         = 7 * 24 * time.Hour
 	keyChars       = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-	// 下限与 setup 页的前端校验一致——校验只放在前端等于没放，直接打 API 就能
-	// 绕过。上限是 bcrypt 的硬限制：超过 72 字节 GenerateFromPassword 会返回
-	// ErrPasswordTooLong，提前挡掉好过让用户收到一句含义不明的「密码加密失败」。
+	// The lower bound matches the frontend validation on the setup page — frontend-only
+	// validation is as good as none, since hitting the API directly bypasses it. The upper
+	// bound is bcrypt's hard limit: past 72 bytes GenerateFromPassword returns
+	// ErrPasswordTooLong, and blocking early beats showing the user an opaque
+	// "failed to hash the password".
 	minPasswordRunes = 8
 	maxPasswordBytes = 72
 )
 
-// errDataSourceUnavailable 是密码相关读操作失败时统一的回复。这些 handler 绝不能
-// 把"读不到"当成"没有设置"：authInit 曾因此在数据库报错时放行，让未认证请求覆盖
-// 掉已有的管理员密码。
-const errDataSourceUnavailable = "数据源暂时不可用，请稍后重试"
+// errDataSourceUnavailable is the uniform reply when a password-related read fails.
+// These handlers must never treat "could not read" as "not set": authInit once did
+// exactly that and, on a database error, let an unauthenticated request overwrite the
+// existing admin password.
+const errDataSourceUnavailable = "The data source is temporarily unavailable; please try again later"
 
-// validatePassword 返回空串表示通过，否则返回可直接展示给用户的中文原因。
+// validatePassword returns the empty string when the password is acceptable,
+// otherwise a reason that can be shown to the user as-is.
 func validatePassword(pw string) string {
 	if utf8.RuneCountInString(pw) < minPasswordRunes {
-		return fmt.Sprintf("密码长度至少 %d 位", minPasswordRunes)
+		return fmt.Sprintf("The password must be at least %d characters long", minPasswordRunes)
 	}
 	if len(pw) > maxPasswordBytes {
-		return fmt.Sprintf("密码长度不能超过 %d 字节", maxPasswordBytes)
+		return fmt.Sprintf("The password must not exceed %d bytes", maxPasswordBytes)
 	}
 	return ""
 }
@@ -138,9 +142,10 @@ func (s *Server) requireAuth(h http.Handler) http.Handler {
 }
 
 // GET /api/auth/status — reports whether the admin password has been initialised.
-// 读失败必须回 503 而不是 initialized:false：前端在 initialized:false 时会把用户
-// 送到 /setup 去设置密码（login/page.tsx），把数据库故障包装成 200 等于把用户往
-// 覆盖已有密码的路上推。
+// A read failure must answer 503, never initialized:false: on initialized:false the
+// frontend sends the user to /setup to set a password (login/page.tsx), so dressing a
+// database failure up as a 200 pushes the user straight toward overwriting the
+// existing password.
 func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
 	pg := s.pg(w)
 	if pg == nil {
