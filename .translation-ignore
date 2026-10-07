@@ -7,6 +7,8 @@
 CHANGELOG.md
 # --- README documents the legacy [模型] reason prefix ---
 README.md
+# --- SYNC.md documents this sync process and quotes Chinese examples ---
+SYNC.md
 # --- ICP filing numbers (京ICP备...) are Chinese by definition: parsing logic + fixtures ---
 db/company_scope.go
 db/company_scope_test.go

@@ -55,6 +55,7 @@ HITS="$(grep -rnP "$CJK" . \
   --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.next \
   --exclude-dir=out --exclude-dir=dist --exclude-dir=data \
   --exclude='*.sum' --exclude='*.png' --exclude='*.jpg' --exclude='*.webp' \
+  --exclude=.translation-ignore \
   2>/dev/null | sed 's|^\./||' || true)"
 
 IGNORE_LIST="$(grep -vE '^\s*(#|$)' .translation-ignore 2>/dev/null || true)"
