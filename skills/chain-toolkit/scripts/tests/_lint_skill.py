@@ -23,7 +23,6 @@ STALE = [
     "xss-hunter",
     "idor-hunter",
     "csrf-hunter",
-    "subdomain-takeover",
 ]
 
 

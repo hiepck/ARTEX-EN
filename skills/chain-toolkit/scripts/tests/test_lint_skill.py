@@ -34,6 +34,12 @@ class LintSkillTest(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertIn("oauth-hunter", r.stdout + r.stderr)
 
+    def test_legit_vuln_class_name_allowed(self):
+        # subdomain-takeover is a real vuln class (H1 #145), not only a penred
+        # sub-agent — it must be allowed in ported content.
+        r = _lint("---\nname: hunt-x\ndescription: d\n---\n### subdomain-takeover anchors\n")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
