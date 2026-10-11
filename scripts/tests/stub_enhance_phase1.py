@@ -24,6 +24,9 @@ def _canned(path: str):
         # playwright already registered; writeup-search/burp absent.
         return {"servers": [{"id": 1, "name": "playwright", "transport": "stdio"}]}
     if path == "/api/llm":
+        # real getLLM returns runtime config, NOT a profile list.
+        return {"configured": True, "provider": "anthropic", "model": "x"}
+    if path == "/api/llm/profiles":
         return {"profiles": [{"id": 9, "name": "strong"}]}
     if path == "/api/agents/worker/visibility":
         return {"mcp": [7], "skill": ["hunting-methodology", "api-recon"]}

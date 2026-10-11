@@ -61,11 +61,11 @@ echo "bound skills to worker (merged)"
 
 # --- optional: pin the planner LLM profile ---
 if [ -n "${PLANNER_PROFILE:-}" ]; then
-  profiles=$(api "$ARTEX_URL/api/llm")
+  profiles=$(api "$ARTEX_URL/api/llm/profiles")
   pid=$(printf '%s' "$profiles" | jq -r --arg p "$PLANNER_PROFILE" \
     '((.profiles // .)[]? | select((.id|tostring)==$p or .name==$p) | .id) // empty' | head -1)
   if [ -n "$pid" ]; then
-    api -X PUT "$ARTEX_URL/api/agents/planner" -d "$(jq -cn --argjson id "$pid" '{llm_profile_id:$id}')" >/dev/null
+    api -X PUT "$ARTEX_URL/api/agents/planner/config" -d "$(jq -cn --argjson id "$pid" '{llm_profile_id:$id}')" >/dev/null
     echo "pinned planner LLM profile -> $pid"
   else echo "PLANNER_PROFILE '$PLANNER_PROFILE' not found — leaving planner untouched"; fi
 else echo "PLANNER_PROFILE unset — leaving planner untouched"; fi
