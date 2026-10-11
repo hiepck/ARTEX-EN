@@ -1,4 +1,4 @@
-// ARTEX domain model — types used across the UI.
+// Penred domain model — types used across the UI.
 // Derived from the functional spec (section 7: key data shapes).
 
 export type TaskStatus = "created" | "queued" | "running" | "paused" | "done" | "failed" | "timeout";

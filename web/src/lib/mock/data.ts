@@ -2911,7 +2911,7 @@ export const trafficDetail: TrafficDetail = {
   req: `GET /v1/orders?id=1002 HTTP/1.1
 Host: api.acme.com
 Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
-User-Agent: ARTEX-worker/1.0
+User-Agent: Penred-worker/1.0
 Accept: application/json
 
 `,
@@ -3154,15 +3154,15 @@ const promptVars: PromptVar[] = [
 ];
 
 const promptVersions: PromptVersion[] = [
-  { version: 3, ts: T("2026-07-25T10:00:00Z"), note: "Stronger guidance for authorization-bypass probing", template_text: "You are the ARTEX planner..." },
-  { version: 2, ts: T("2026-07-20T10:00:00Z"), note: "First-version tweaks", template_text: "You are the ARTEX planner (v2)..." },
+  { version: 3, ts: T("2026-07-25T10:00:00Z"), note: "Stronger guidance for authorization-bypass probing", template_text: "You are the Penred planner..." },
+  { version: 2, ts: T("2026-07-20T10:00:00Z"), note: "First-version tweaks", template_text: "You are the Penred planner (v2)..." },
 ];
 
 export function agentDetail(key: string): AgentDetail {
   const a = agents.find((x) => x.key === key) ?? agents[1];
   return {
     agent: a,
-    prompt: `You are ARTEX's "${a.name}".\nGoal: {{.Goal}}\nAsset overview: {{.AssetSummary}}\nRoute hint: {{.RouteHint}}\nUse the information above to push the exploration forward and write the results back to the graph with the tools.`,
+    prompt: `You are Penred's "${a.name}".\nGoal: {{.Goal}}\nAsset overview: {{.AssetSummary}}\nRoute hint: {{.RouteHint}}\nUse the information above to push the exploration forward and write the results back to the graph with the tools.`,
     variables: promptVars,
     versions: promptVersions,
     visibility: { mcp: [1, 2], skill: ["api-recon", "playwright-cli"] },

@@ -70,7 +70,7 @@ export default function SetupPage() {
           <div className="absolute size-60 rounded-full border border-primary-foreground/15" />
           <div className="absolute size-40 rounded-full border border-primary-foreground/20" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="ARTEX" width={160} height={160} className="relative brightness-0 invert" />
+          <img src="/logo.png" alt="Penred" width={160} height={160} className="relative brightness-0 invert" />
         </div>
       </div>
 
@@ -82,7 +82,7 @@ export default function SetupPage() {
             <p className="mx-auto max-w-xl text-muted-foreground">
               {unavailable
                 ? "The backend or database is temporarily unavailable. To avoid overwriting the password that already exists on this instance, the setup entry has been temporarily disabled — please restore the service and try again."
-                : "This is the first run of ARTEX; set a login password for the account (at least 8 characters)"}
+                : "This is the first run of Penred; set a login password for the account (at least 8 characters)"}
             </p>
           </div>
           {unavailable ? (

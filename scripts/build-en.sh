@@ -36,7 +36,7 @@ docker run --rm ${RUNAS} -e HOME=/tmp \
   -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH="$ARCH" \
   -e GOCACHE=/cache/go-build -e GOPATH=/cache/go-mod -e GOMODCACHE=/cache/go-mod/pkg/mod \
   -v "$PWD:/src" -v "$CACHE_DIR/go-build:/cache/go-build" -v "$CACHE_DIR/go-mod:/cache/go-mod" \
-  -w /src "$GO_IMAGE" go build -tags embedui -o "dist/${ARCH}/artex" ./cmd/artex
+  -w /src "$GO_IMAGE" go build -tags embedui -buildvcs=false -o "dist/${ARCH}/artex" ./cmd/artex
 
 echo "==> [4/4] Building Docker image artex-en:latest"
 docker build -t artex-en:latest .

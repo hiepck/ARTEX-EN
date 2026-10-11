@@ -3,11 +3,11 @@ import packageJson from "../../package.json";
 const currentYear = new Date().getFullYear();
 
 export const APP_CONFIG = {
-  name: "ARTEX",
+  name: "Penred",
   version: packageJson.version,
-  copyright: `© ${currentYear}, ARTEX.`,
+  copyright: `© ${currentYear}, Penred.`,
   meta: {
-    title: "ARTEX — Autonomous penetration testing console",
+    title: "Penred — Autonomous penetration testing console",
     description: "Console for the LLM-driven autonomous penetration testing system",
   },
 };

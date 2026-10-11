@@ -305,7 +305,7 @@ export function UpdateCard() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          One-click update relies on the supervisor script to restart the program. Start ARTEX through <span className="font-mono">start.sh</span> (on Windows,
+          One-click update relies on the supervisor script to restart the program. Start Penred through <span className="font-mono">start.sh</span> (on Windows,
           <span className="font-mono"> start.bat</span>); when the artex binary is run directly, nothing brings it back up after it exits.
         </p>
       </CardContent>
