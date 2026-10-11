@@ -81,7 +81,7 @@ Ported/adapted from the user's `~/Tools/penred`:
 |---|---|
 | `hunting-methodology` | Master find-more-bugs: 5-phase flow + depth-matrix floor (≥25 attempts/class). |
 | `chain-hunting` | Master chaining: hybrid correlate→chain-table→pursue→gate→compose. Ships `references/chain-table.md` (capability→next-bug→terminal-impact tables, deep-chain examples) and `references/payloads.md` (bypass tables). |
-| `hunt-idor`, `hunt-ssrf`, `hunt-oauth`, `hunt-xss`, `hunt-upload-rce`, `hunt-business-logic`, `hunt-info-disclosure` | Per-class methodology + `references/` incl. source-review greps. |
+| `hunt-idor`, `hunt-oauth`, `hunt-xss`, `hunt-rce`, `hunt-business-logic`, `hunt-info-disclosure` | Per-class methodology + `references/` incl. source-review greps (ported from penred's six existing `hunt-*` skills). SSRF and file-upload methodology live in `chain-hunting/references/` and `hunt-rce` rather than as separate skills, matching the penred source. |
 | `validation-gate` | 7-Question Gate, never-submit list, Owned-Test-Account Trap, devil's-advocate stance. Ships `references/never-submit.md`. |
 | `chain-toolkit` | Hosts the Python scripts (§4.C) and documents how to call them from `Bash`. |
 
@@ -207,9 +207,12 @@ too weak.
 
 ## 8. Severity / CVSS 4.0 & reporting
 
-- Composite severity is computed by `cvss_calc.py` using **CVSS 4.0** (matches Bugcrowd /
-  Intigriti / YesWeHack / Immunefi; HackerOne's 3.1 can be emitted as a secondary vector if
-  needed). The score maps to the `findings.severity` bucket.
+- Composite severity is computed by `cvss_calc.py`, ported from penred (**CVSS 3.1**, stdlib-only,
+  deterministic per-class vectors). The score maps to the `findings.severity` bucket
+  (critical|high|medium|low). CVSS 3.1 is reused rather than authoring a full 4.0 calculator from
+  scratch (that would contradict the max-reuse constraint); a 4.0 vector is a documented future
+  option (§12) if a target platform requires it. For a composite, the chain is scored on its
+  **terminal impact** (not any single leg), with the chain narrative justifying the vector.
 - The composite report is produced by the **existing reporter workflow** — no new report path.
   The chain narrative (legs, capabilities, impact) is carried in `report`/`evidence` and rendered
   by the existing `report/` package.
@@ -260,6 +263,8 @@ too weak.
   planner already consumes. Confirm against `agent/planner.go` trigger-event handling before build.
 - The precise set of chain-table entries to port first (prioritize the high-yield feeders:
   SSRF, IDOR, info-disclosure, open-redirect, OAuth).
+- **CVSS 4.0** output as an optional second vector in `cvss_calc.py`, added only if a target
+  platform (Bugcrowd / Intigriti / YesWeHack / Immunefi) requires it. v1 ships the ported 3.1.
 
 ## 13. File manifest (what gets added)
 
@@ -269,10 +274,9 @@ skills/chain-hunting/SKILL.md
 skills/chain-hunting/references/chain-table.md
 skills/chain-hunting/references/payloads.md
 skills/hunt-idor/SKILL.md            (+ references/)
-skills/hunt-ssrf/SKILL.md            (+ references/)
 skills/hunt-oauth/SKILL.md           (+ references/)
 skills/hunt-xss/SKILL.md             (+ references/)
-skills/hunt-upload-rce/SKILL.md      (+ references/)
+skills/hunt-rce/SKILL.md             (+ references/)
 skills/hunt-business-logic/SKILL.md  (+ references/)
 skills/hunt-info-disclosure/SKILL.md (+ references/)
 skills/validation-gate/SKILL.md
@@ -281,6 +285,7 @@ skills/chain-toolkit/SKILL.md
 skills/chain-toolkit/scripts/chain_plan.py
 skills/chain-toolkit/scripts/cvss_calc.py
 skills/chain-toolkit/scripts/dedup.py
+skills/chain-toolkit/scripts/simhash.py   (dep of dedup.py, ported from penred)
 skills/chain-toolkit/scripts/tests/…
 scripts/setup-chaining-pack.sh       (REST-API seed for the chainer agent + bindings + trigger)
 docs/chaining-pack.md                (setup + manual-UI equivalent)
