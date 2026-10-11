@@ -13,6 +13,7 @@ import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 LOG = os.environ.get("STUB_LOG", "/dev/null")
+BODYLOG = os.environ.get("STUB_BODYLOG", "/dev/null")
 
 
 def _canned(path: str):
@@ -24,6 +25,9 @@ def _canned(path: str):
         return {"tools": []}
     if path == "/api/agents/chainer/triggers":
         return {"triggers": [{"on_finding": True}]}
+    if path == "/api/agents/worker/visibility":
+        # a pre-existing worker config the seed must preserve when merging.
+        return {"mcp": [7], "skill": ["api-recon"]}
     return {"ok": True}
 
 
@@ -32,8 +36,9 @@ class Handler(BaseHTTPRequestHandler):
         with open(LOG, "a", encoding="utf-8") as fh:
             fh.write(f"{self.command} {self.path}\n")
         length = int(self.headers.get("Content-Length", 0) or 0)
-        if length:
-            self.rfile.read(length)
+        body = self.rfile.read(length).decode("utf-8", "replace") if length else ""
+        with open(BODYLOG, "a", encoding="utf-8") as fh:
+            fh.write(f"{self.command} {self.path} {body}\n")
         body = json.dumps(_canned(self.path)).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")

@@ -13,6 +13,8 @@ ARTEX_URL="${ARTEX_URL:-http://127.0.0.1:8787}"
 
 AGENT_KEY="chainer"
 SKILLS='["chain-hunting","chain-toolkit","validation-gate"]'
+# Hunting skills deepen the worker's per-class bug finding (spec goal #1).
+WORKER_SKILLS='["hunting-methodology","hunt-idor","hunt-oauth","hunt-xss","hunt-rce","hunt-business-logic","hunt-info-disclosure","validation-gate"]'
 # Read/correlate/plan tools for the chainer — plus report_finding for the composite only.
 TOOLS=(list_findings list_task_findings get_task_node_detail get_task_graph \
        list_task_worker_traces get_task_worker_trace add_task_hint record_fact Bash report_finding)
@@ -59,7 +61,15 @@ echo "prompt set"
 # --- skill visibility (idempotent PUT) ---
 api -X PUT "$ARTEX_URL/api/agents/$AGENT_KEY/visibility" \
   -d "$(jq -n --argjson s "$SKILLS" '{mcp:[],skill:$s}')" >/dev/null
-echo "bound skills: $SKILLS"
+echo "bound chainer skills: $SKILLS"
+
+# --- bind hunting skills to the worker, MERGING with its existing skills + mcp ---
+# (PUT overwrites visibility, so read-modify-write to avoid dropping prior bindings.)
+wvis=$(api "$ARTEX_URL/api/agents/worker/visibility")
+merged=$(printf '%s' "$wvis" | jq -c --argjson add "$WORKER_SKILLS" \
+  '{mcp:(.mcp // []), skill:((.skill // []) + $add | unique)}')
+api -X PUT "$ARTEX_URL/api/agents/worker/visibility" -d "$merged" >/dev/null
+echo "bound hunting skills to worker (merged with existing)"
 
 # --- tool bindings (read current row, append chainer if absent, PUT) ---
 tools_json=$(api "$ARTEX_URL/api/tools")

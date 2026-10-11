@@ -33,7 +33,9 @@ scripts/setup-chaining-pack.sh
 
 The script logs in, creates the `chainer` agent (if absent), sets its prompt, binds the
 `chain-hunting` / `chain-toolkit` / `validation-gate` skills, binds the chainer's tools,
-and creates an `on_finding` trigger. **It is idempotent** — re-running updates in place
+creates an `on_finding` trigger, and **also binds the hunting skills (`hunting-methodology`,
+the `hunt-*` set, `validation-gate`) to the `worker`** — merged with the worker's existing
+skills, so its per-class bug finding gets deeper too. **It is idempotent** — re-running updates in place
 and never creates a second agent or trigger. With no password set it fails fast and makes
 no changes.
 
@@ -56,8 +58,9 @@ If you prefer the UI over the seed script:
 5. **Add a trigger**: condition `on_finding`, enabled, with a finding message telling the
    agent to correlate the new finding and plant a chain-pursuit hint for in-scope hops.
 
-Bind the hunting skills (`hunting-methodology`, the `hunt-*` set, `validation-gate`) to the
-**worker** so its hunting gets deeper too.
+6. **Bind the hunting skills to the worker** (agent visibility): `hunting-methodology`, the
+   `hunt-*` set, and `validation-gate` — so the worker's per-class bug finding gets deeper.
+   Keep the worker's existing skills; add these to them.
 
 ## Storage model (composite findings)
 
