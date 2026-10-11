@@ -90,3 +90,21 @@ workflow.
   hop is a hard stop — the chain is marked blocked and not pursued.
 
 See the `chain-hunting` and `validation-gate` skills for the full methodology.
+
+## Validation run
+
+Automated checks (run on 2026-10-11, all green):
+
+- Python toolkit suite: `chain_plan`, `dedup`, `cvss_calc`, `_lint_skill` — all pass
+  (`python3 skills/chain-toolkit/scripts/tests/<name>.py`).
+- Seed script: `bash scripts/tests/test_setup_chaining_pack.sh` — pass (auth-guard +
+  idempotency against a recording stub).
+- Lint sweep over all 43 pack markdown files — clean.
+
+**Acceptance gate (operator-run, pending):** the end-to-end sample chain requires a
+running ARTEX plus a self-hosted lab (no ARTEX chain-eval harness exists). Scenario
+`SSRF → cloud metadata → credential → privileged action`: start ARTEX, run the seed
+script, launch a task against the lab, and confirm — the worker reports the SSRF leg; the
+`chainer` fires on `on_finding` and plants a chain-pursuit hint; the planner dispatches the
+next hop; a composite `findings` row (`vulnclass="chain"`) is stored with the structure in
+"Storage model" above. Record the outcome here when run.
