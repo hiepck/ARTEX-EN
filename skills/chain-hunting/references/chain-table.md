@@ -105,7 +105,7 @@ Standalone is on the never-submit list. Anchors:
 4. **Login flow CSRF anchor** — does the redirect happen post-login? Self-XSS on the redirect target + login CSRF = ATO.
 5. **Cookie tossing prerequisite** — does the redirect target a sibling subdomain? If yes + you control any subdomain → cookie tossing chain.
 
-### `cors-hunter` — anchors
+### `cors` — anchors
 
 CORS wildcard alone is on the never-submit list. Anchors:
 
@@ -146,7 +146,7 @@ Standalone takeover is medium without chain. Anchors:
 4. **Subdomain is referenced from prod domain JS** (CDN, asset, config) → trusted-domain phishing → credential theft.
 5. **Subdomain is in CSP `script-src`** → CSP bypass on the parent → stored XSS escalation.
 
-### `xxe-hunter` — anchors
+### `xxe` — anchors
 
 In-band XXE alone (read /etc/passwd) is informational on cloud-hosted apps. Anchors:
 
