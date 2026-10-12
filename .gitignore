@@ -72,3 +72,6 @@ docker-compose.override.yml
 
 # Containerized build caches (scripts/build-en.sh)
 /.build-cache/
+
+# local secrets (test accounts, API keys) — never commit
+.secrets/
