@@ -33,6 +33,14 @@ never declared exhausted by the skill — that stays with `hunting-methodology`)
 The skills bind to both `worker` and `pentest`, **merged** with their existing
 skills (nothing removed).
 
+Two skills ship a lazy-loaded **reference file** (kept out of the loaded prompt
+unless its condition applies):
+
+- `hunt-ssrf/references/source-code-review.md` — grep + Semgrep patterns for when
+  you have repo access.
+- `hunt-graphql-authz/references/clairvoyance.md` — introspection recovery via
+  the field-suggestion oracle when introspection is disabled.
+
 ## One-command setup
 
 ```bash
@@ -62,8 +70,12 @@ Automated checks (all green):
 - Skill lint over the five `SKILL.md`:
   `for s in hunt-ssrf hunt-cache-poison hunt-race-conditions hunt-graphql-authz hunt-smuggling; do python3 -I skills/chain-toolkit/scripts/tests/_lint_skill.py skills/$s/SKILL.md; done`
 - Seed script: `bash scripts/tests/test_setup_enhance_phase2.sh` — auth-guard
-  (no password ⇒ no PUT), and worker/pentest skill-merge (existing skill + mcp
-  preserved, new skills added), against a recording stub.
+  (no password ⇒ no PUT), full-set binding on `worker` **and** `pentest`,
+  prior skill/mcp preserved, each new skill present exactly once (dedup), and a
+  second run producing an identical PUT body (idempotency), against a **stateful**
+  recording stub.
+- Reference integrity: `bash scripts/tests/test_phase2_skill_refs.sh` — every
+  `references/<file>.md` a skill points at must exist.
 
 **Acceptance gate (operator-run, pending):** with a running ARTEX + a self-hosted
 lab —
@@ -76,3 +88,10 @@ lab —
    concurrent burst plus a sequential baseline as evidence.
 
 Record the outcome here when run.
+
+## Phase-2 scope note
+
+The umbrella §Phase 2 lists ~14 exotic classes plus a recon pack. This pack
+delivers the five highest-value classes; prototype pollution, mass assignment,
+deserialization, SSTI, XXE, CORS, and subdomain takeover are **deferred** to a
+later pack.
