@@ -7,6 +7,10 @@ description: Hunting skill for GraphQL authorization flaws — introspection rec
 
 GraphQL centralizes many operations behind one endpoint. Authorization mistakes often appear at the resolver level, not the HTTP route level, making them invisible to route-based scanners.
 
+## Deeper reference (load only if this specific situation applies)
+
+- **`references/clairvoyance.md`** — introspection is disabled but you still need the schema to hunt field-level authz. Covers the field-suggestion oracle and the Clairvoyance recovery loop.
+
 ## When to invoke
 
 - Endpoint path contains `/graphql`, `/gql`, `/api/graphql`, `/graphql/v1`.

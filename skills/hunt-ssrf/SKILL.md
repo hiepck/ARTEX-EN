@@ -5,7 +5,11 @@ description: Hunting skill for Server-Side Request Forgery (SSRF) — in-band me
 
 # SSRF Hunting Methodology
 
-SSRF lets you coerce the server into making requests you control. The impact ranges from internal recon to cloud credential theft to RCE. This skill covers black-box hunting; source-code review is covered by `references/source-code-review.md` if you have repo access.
+SSRF lets you coerce the server into making requests you control. The impact ranges from internal recon to cloud credential theft to RCE. This skill covers black-box hunting.
+
+## Deeper reference (load only if this specific situation applies)
+
+- **`references/source-code-review.md`** — you have repo/source access (OSS bug, internal pentest, in-scope GitHub org). Covers grep targets, Semgrep rules, and the redirect-policy check. Not useful for pure black-box hunting.
 
 ## When to invoke
 
