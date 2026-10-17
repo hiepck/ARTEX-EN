@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/Autumn-27/artex/agent"
+	"github.com/Autumn-27/norma/llm"
 )
 
 // setupHarness builds the Postgres-backed fixture shared by the integration
@@ -33,6 +36,36 @@ func setupHarness(t *testing.T) (m *Manager, task *Task, target *httptest.Server
 	t.Cleanup(target.Close)
 
 	return m, task, target
+}
+
+// wireHarnessEngine builds one fake-provider-backed Planner/Worker and
+// installs them into a real *Engine via SetAuthoritativeAgentResolver, so
+// Engine.Run drives them for real instead of resolving the DB-configured
+// agents. Both are forced into non-streaming mode (SetNonStreaming) so the
+// loop calls scriptedProvider.Complete exclusively — see the ruling in this
+// plan's ledger (Task 1): scriptedProvider's Stream degrades a tool_use
+// message to a single text event and cannot drive agentcore's tool-calling
+// loop on its own.
+//
+// No standalone test wraps this function: *Engine exposes
+// SetAuthoritativeAgentResolver (server/engine.go:720) but no getter to read
+// the installed resolver back, and the resolver is invoked only internally
+// by plannerLoop/workerLoop during Run. Its correctness is verified end to
+// end by TestEngineDrivesOnePlannerRoundThroughWorkerDispatch (Task 4).
+func wireHarnessEngine(t *testing.T, m *Manager, prov llm.Provider) *Engine {
+	t.Helper()
+
+	pl := agent.NewPlanner(prov, "harness-fake-model", t.TempDir(), nil, 200000, 10)
+	pl.SetNonStreaming(func() bool { return true })
+
+	wk := agent.NewWorker(prov, "harness-fake-model", t.TempDir(), nil, 200000, 10)
+	wk.SetNonStreaming(func() bool { return true })
+
+	e := NewEngine(m)
+	e.SetAuthoritativeAgentResolver(func(*Task) (*agent.Planner, *agent.Worker) {
+		return pl, wk
+	})
+	return e
 }
 
 func TestSetupHarnessCreatesTaskAndTarget(t *testing.T) {
