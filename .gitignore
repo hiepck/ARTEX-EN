@@ -75,3 +75,6 @@ docker-compose.override.yml
 
 # local secrets (test accounts, API keys) — never commit
 .secrets/
+
+# worktrees (superpowers skill)
+/.worktrees/
