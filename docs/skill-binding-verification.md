@@ -254,3 +254,217 @@ is new).
   binary into the repo root (or set `ARTEX_SKILL_DIR` explicitly), not into
   `/tmp`, or the `skillDir` log line will quietly point at an empty directory
   and look like a false "skills missing" failure that isn't one.
+
+## Task 2: skill-description byte-budget audit
+
+Closes Task 2 of the `2026-10-18-w-skill-binding-and-expansion` plan: of the
+skills actually bound to `worker`/`pentest` right now, how much of the
+`Skill` meta-tool's render budget do their `description:` frontmatter fields
+use, and how much headroom is left before Tasks 3-9 add 7 more?
+
+### Environment (fresh instance, independent of Task 1's teardown)
+
+Same recipe as Task 1, with a different container/binary/port so nothing
+could collide with a lingering Task-1 resource:
+
+```bash
+docker run -d --name artex-verify-pg2 -e POSTGRES_USER=artex_test2 \
+  -e POSTGRES_PASSWORD=artex_test2 -e POSTGRES_DB=artex_test2 \
+  -p 55434:5432 postgres:16
+
+cd /Users/hiepck/Tools/ARTEX-EN/.worktrees/w-skill-binding
+CGO_ENABLED=0 go build -o ./artex-verify-bin2 ./cmd/artex
+ARTEX_PG_DSN="postgres://artex_test2:artex_test2@localhost:55434/artex_test2?sslmode=disable" \
+  ./artex-verify-bin2 -addr :18797 -proxy 127.0.0.1:18798
+```
+
+Startup log confirmed `skillDir` resolved to this repo's `./skills/` (same
+fix from Task 1 — binary built into the repo root, not `/tmp`).
+
+### Step 1: bootstrap + bind, read the live visibility lists
+
+```bash
+curl -s http://127.0.0.1:18797/api/auth/status
+# {"initialized":false}
+curl -s -X POST http://127.0.0.1:18797/api/auth/init -H 'Content-Type: application/json' \
+  -d '{"password":"VerifyPass123!"}'
+# {"token":"...<JWT>..."}
+
+ARTEX_URL=http://127.0.0.1:18797 ARTEX_ADMIN_PASSWORD='VerifyPass123!' \
+  bash scripts/setup-enhance-phase2.sh
+# bound Phase-2 skills to worker (merged)
+# bound Phase-2 skills to pentest (merged)
+# Phase-2 skill binding seed complete.
+
+curl -fsS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18797/api/agents/worker/visibility | jq .
+curl -fsS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18797/api/agents/pentest/visibility | jq .
+```
+
+Both returned the identical list (matching Task 1's finding — the
+`builtinSkillVisibility` seed in `db/db.go` binds `api-recon` to
+`auto`/`pentest`/`worker` by default on a fresh DB, on top of which
+`setup-enhance-phase2.sh` merges in 5 more):
+
+```json
+{
+  "mcp": null,
+  "skill": [
+    "api-recon",
+    "hunt-cache-poison",
+    "hunt-graphql-authz",
+    "hunt-race-conditions",
+    "hunt-smuggling",
+    "hunt-ssrf"
+  ]
+}
+```
+
+**6 skills are currently bound, identically, to both `worker` and `pentest`.**
+No other skill in the repo (including `hunt-idor`, `chain-hunting`,
+`validation-gate`, etc.) is bound to either agent today — they exist under
+`./skills/` and are discoverable via `GET /api/skills`, but are invisible to
+the `Skill` meta-tool until an operator opts them in via
+`PUT /api/agents/{agent}/visibility`.
+
+### Step 2: measure each bound skill's `description:` length
+
+Per `norma@v0.4.3`'s `skill/skill.go` (the vendored module backing ARTEX's
+`Skill` meta-tool — read directly from the Go module cache to confirm the
+exact mechanism, not re-derived from memory):
+
+```go
+const (
+	maxSkillListingChars = 8000
+	maxSkillDescChars    = 500
+)
+```
+
+`listing()` renders, for each skill the registry was filtered down to (per
+agent, via the `AgentSkillNames` → `LoadDir` → filter-by-name path confirmed
+in Task 1's Step 4), a line `"\n- " + name + ": " + desc`; any single
+`desc` over 500 is clipped to `desc[:500] + "…"`; the running total `used`
+(byte length of every rendered line so far) is capped at 8000 — past that,
+remaining skills in the list degrade to name-only but are never dropped.
+Both constants are **byte** lengths (Go's `len(string)` counts UTF-8 bytes,
+not Unicode codepoints) — this matters here because two descriptions below
+contain an em dash (`—`, 3 bytes, 1 character), so byte-length and
+character-length differ by a small amount per occurrence.
+
+Measured directly against the live-bound 6 (`skills/<name>/SKILL.md`
+frontmatter, one command per file, cross-checked with both a `) chars"`
+awk one-liner and a Python UTF-8-byte count):
+
+| skill | desc chars | desc bytes | rendered line bytes (`"\n- name: desc"`) |
+| --- | ---: | ---: | ---: |
+| `api-recon` | 60 | 60 | 74 |
+| `hunt-smuggling` | 257 | 259 | 278 |
+| `hunt-race-conditions` | 262 | 264 | 289 |
+| `hunt-cache-poison` | 280 | 282 | 304 |
+| `hunt-graphql-authz` | 291 | 293 | 316 |
+| `hunt-ssrf` | 302 | 304 | 318 |
+| **Total (worker)** | **1452** | **1462** | **1579** |
+| **Total (pentest)** | **1452** | **1462** | **1579** |
+
+(Worker and pentest totals are identical and computed separately per the
+brief's instruction — they happen to be the same number here only because
+both agents currently have the exact same bound-skill set, not because the
+`Skill` tool pools them.)
+
+### Step 3: compare against budget, flag outliers
+
+- **No currently-bound skill individually exceeds the ~500-char/byte
+  per-skill cap.** The largest is `hunt-ssrf` at 304 bytes — well inside
+  the 500-byte `maxSkillDescChars` clip threshold, so no description is
+  truncated with `…` in the rendered listing today.
+- **Per-agent total is 1,579 rendered bytes against the 8,000-byte
+  `maxSkillListingChars` budget** — **≈6,421 bytes of headroom** before the
+  listing would start degrading remaining skills to name-only, for *each*
+  of `worker` and `pentest` independently.
+- **Headroom for Tasks 3-9:** 7 new skills are coming
+  (`hunt-prototype-pollution`, `hunt-mass-assignment`,
+  `hunt-deserialization`, `hunt-ssti`, `hunt-xxe`, `hunt-cors`,
+  `hunt-subdomain-takeover`, per the plan's own Task 3-9 headers — none of
+  these is `hunt-idor`). If each stays under the ~500-char/byte
+  per-skill guidance like the 6 above (max observed ~320 rendered bytes
+  each), 7 more skills add at most **≈2,240 rendered bytes**, landing the
+  per-agent total at **≈3,820 of 8,000 bytes — still well under budget**,
+  *provided* each new skill is bound to the same agent(s) as the existing
+  six and each individual task re-checks its own addition against this
+  table before moving to the next, per the plan's Task 3 Step 3 interface.
+
+### Outlier found and trimmed: `hunt-idor` (not currently bound, but flagged by the plan's own research)
+
+`hunt-idor` is **not** in either agent's current visibility list (confirmed
+above), so it does not count toward the totals/headroom figures. It was
+still checked because the plan text explicitly flags it ("the earlier
+research flagged `hunt-idor`'s as the known outlier, ~1400 chars") as a
+latent risk for whenever it (or a skill like it) gets bound later — trimming
+it now is cheap and removes a known landmine before Tasks 3-9 touch
+anything.
+
+Measured `hunt-idor`'s original `description:` field directly (not via the
+500-char-cap-aware `listing()` renderer, since it isn't registry-filtered in
+today — just the raw frontmatter):
+
+- **Before: 904 chars / 908 bytes** — about 1.8x the ~500 budget (the plan's
+  "~1400 chars" estimate was evidently rough; the actual figure measured
+  here is 904/908). The field stuffed in a 1,117-report corpus citation and
+  a run of ten-plus CVE/GHSA identifiers (OneUptime, Zitadel ×2, Inforcer,
+  Apache Answer, Indico, FastGPT/WeKnora/Paperclip) that already live, in
+  full narrative form, in the skill's own body (`Crown Jewel Targets`,
+  `Common Root Causes`, `Bypass Techniques` sections) — so trimming the
+  frontmatter line loses no unique information, only the duplicate summary.
+
+Trimmed to the essential trigger criteria (what it covers, when to invoke),
+dropping the report-count/CVE-list narrative since it's already fully
+preserved in the body:
+
+```
+Hunting skill for Insecure Direct Object Reference / Broken Object Level
+Authorization (BOLA — OWASP API1:2023). Covers multi-tenant header bypass,
+GraphQL field-level/nested-object pivots, path-vs-body ID mismatch, UUIDv1
+prediction, mass assignment, and cross-tenant AI/agent access. Use when
+hunting IDOR/BOLA on web apps, APIs, GraphQL, multi-tenant SaaS, mobile,
+automotive/IoT, or AI/ML inference servers.
+```
+
+- **After: 411 chars / 413 bytes** — under the 500-byte budget with room to
+  spare.
+
+Verified against the live instance (still running at that point) that the
+trimmed description is exactly what `GET /api/skills` serves — skills are
+read fresh off disk per request, no restart needed — and against the repo's
+own skill linter:
+
+```bash
+$ python3 -I skills/chain-toolkit/scripts/tests/_lint_skill.py skills/hunt-idor/SKILL.md
+$ echo $?
+0
+```
+
+No other file was modified; the six currently-bound skills' descriptions
+were left as-is (none needed trimming).
+
+### Step 4: teardown
+
+```bash
+pkill -f "./artex-verify-bin2"
+docker rm -f artex-verify-pg2
+rm -f artex-verify-bin2 jwt.key
+rm -rf data
+```
+
+`git status` afterward showed exactly one modified file
+(`skills/hunt-idor/SKILL.md`) and this doc's edit — no stray build
+artifacts, containers, or data directories left behind.
+
+### Takeaway for Tasks 3-9
+
+- Use the per-skill byte counts above as a sanity ceiling: stay well under
+  500 bytes per `description:` field (the six currently-bound skills range
+  60-304 bytes; aim for that range, not the cap).
+- Current per-agent rendered total is 1,579 of 8,000 bytes. Budget roughly
+  300-450 rendered bytes per new skill description and re-sum before moving
+  to the next task, as each task's own Step 3 already requires.
+- `hunt-idor` is fixed now (413 bytes) — if a future task considers binding
+  it to `worker`/`pentest`, it no longer needs separate trimming.
