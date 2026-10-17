@@ -89,6 +89,14 @@ lab —
 
 Record the outcome here when run.
 
+Item 1 (seed → binding, discovery) is now verified against a live instance —
+see `docs/skill-binding-verification.md` for the full command transcript.
+Confirmed: `GET /api/skills` discovers every directory under `./skills/`
+(including all five Phase-2 skills), and `setup-enhance-phase2.sh` binds them
+to `worker` and `pentest` end to end, merged with prior bindings, with zero
+code changes needed. Items 2-3 (live exploration against SSRF/race labs with a
+configured LLM) remain pending — out of scope for that verification pass.
+
 ## Phase-2 scope note
 
 The umbrella §Phase 2 lists ~14 exotic classes plus a recon pack. This pack
