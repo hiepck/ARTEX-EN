@@ -105,3 +105,75 @@ func TestLegacySSEClientDiscoverAndCall(t *testing.T) {
 		t.Fatalf("Call() = %q, %v", got, err)
 	}
 }
+
+// A server that only accepts one Host header (mirrors Burp MCP, which rejects any
+// Host other than its loopback address with 403). Guards the fix that applies a
+// configured "Host" via req.Host — Go ignores Header["Host"] when writing a request,
+// so without it the server always saw the URL's host and refused the connection.
+func TestLegacySSEClientSendsConfiguredHostHeader(t *testing.T) {
+	const wantHost = "localhost:9876"
+	var mu sync.Mutex
+	var stream http.ResponseWriter
+	var flusher http.Flusher
+	messages := make(chan []byte, 8)
+	var baseURL string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != wantHost {
+			http.Error(w, "bad host", http.StatusForbidden)
+			return
+		}
+		switch r.URL.Path {
+		case "/sse":
+			id := "host-session"
+			mu.Lock()
+			stream, flusher = w, w.(http.Flusher)
+			mu.Unlock()
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprintf(w, "event: endpoint\ndata: %s/message?sessionId=%s\n\n", baseURL, id)
+			flusher.Flush()
+			for {
+				select {
+				case payload := <-messages:
+					fmt.Fprintf(w, "event: message\ndata: %s\n\n", payload)
+					flusher.Flush()
+				case <-r.Context().Done():
+					return
+				}
+			}
+		case "/message":
+			var req rpcRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusAccepted)
+			if req.ID == 0 {
+				return
+			}
+			resultJSON, _ := json.Marshal(map[string]any{"tools": []any{map[string]any{"name": "echo", "inputSchema": map[string]any{"type": "object"}}}})
+			payload, _ := json.Marshal(rpcResponse{JSONRPC: "2.0", ID: req.ID, Result: json.RawMessage(resultJSON)})
+			mu.Lock()
+			streamReady := stream != nil
+			mu.Unlock()
+			if streamReady {
+				messages <- payload
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	baseURL = srv.URL
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c, err := NewSSE(ctx, "test", srv.URL+"/sse", map[string]string{"Host": wantHost}, false)
+	if err != nil {
+		t.Fatalf("NewSSE with a configured Host must not be rejected: %v", err)
+	}
+	defer c.Close()
+	if _, err := c.Tools(ctx); err != nil {
+		t.Fatalf("Tools() over a Host-validated server: %v", err)
+	}
+}

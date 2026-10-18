@@ -92,6 +92,20 @@ func normalizeHeaders(headers map[string]string) (map[string]string, error) {
 	return out, nil
 }
 
+// applyHeaders copies the configured headers onto req. A "Host" entry goes to
+// req.Host: Go ignores Header["Host"] when writing the request, so without this a
+// server that validates the Host header (e.g. Burp MCP, which rejects anything but
+// its loopback address) always saw the URL's host and refused the connection.
+func applyHeaders(req *http.Request, headers map[string]string) {
+	for k, v := range headers {
+		if strings.EqualFold(k, "Host") {
+			req.Host = v
+			continue
+		}
+		req.Header.Set(k, v)
+	}
+}
+
 // New connects to a remote MCP endpoint and performs the initialize handshake.
 // headers are sent on every request (Authorization, custom API keys, …).
 // When insecure is true, TLS certificate verification is skipped so servers that
@@ -137,9 +151,7 @@ func NewSSE(ctx context.Context, server, sseURL string, headers map[string]strin
 		return nil, err
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	for k, v := range cleanHeaders {
-		req.Header.Set(k, v)
-	}
+	applyHeaders(req, cleanHeaders)
 	resp, err := hc.Do(req)
 	if err != nil {
 		cancel()
@@ -380,9 +392,7 @@ func (c *Client) Close() error {
 		return nil
 	}
 	req.Header.Set("Mcp-Session-Id", sid)
-	for k, v := range c.headers {
-		req.Header.Set(k, v)
-	}
+	applyHeaders(req, c.headers)
 	if resp, err := c.http.Do(req); err == nil {
 		resp.Body.Close()
 	}
@@ -436,9 +446,7 @@ func (c *Client) roundTrip(ctx context.Context, body rpcRequest, expectResp bool
 		version = protocolVersion
 	}
 	req.Header.Set("MCP-Protocol-Version", version)
-	for k, v := range c.headers {
-		req.Header.Set(k, v)
-	}
+	applyHeaders(req, c.headers)
 	c.mu.Lock()
 	sid := c.sessionID
 	c.mu.Unlock()
@@ -507,9 +515,7 @@ func (c *Client) legacyRoundTrip(ctx context.Context, body rpcRequest, expectRes
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	for k, v := range c.headers {
-		req.Header.Set(k, v)
-	}
+	applyHeaders(req, c.headers)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, err
