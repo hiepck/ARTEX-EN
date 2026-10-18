@@ -17,7 +17,7 @@ import (
 // upstream nodes it derived from: facts/intents/findings) and yields (the facts/
 // findings it produced) — without pulling full payloads. parentsOf/yieldsOf are
 // built from the exploration edges in graph_overview.
-func compactIntents(ns []*db.Node, parentsOf, yieldsOf map[int64][]int64) []map[string]any {
+func compactIntents(ns []*db.Node, parentsOf, yieldsOf map[int64][]int64, burn map[int64]db.BurnStats) []map[string]any {
 	out := make([]map[string]any, 0, len(ns))
 	for _, n := range ns {
 		var p map[string]any
@@ -26,6 +26,12 @@ func compactIntents(ns []*db.Node, parentsOf, yieldsOf map[int64][]int64) []map[
 		if n.Inherited {
 			m["source_task_id"] = n.SourceTaskID
 			m["inherited"] = true
+		}
+		// burn_signal_enabled gate: burn is nil (or missing this id) unless the
+		// operator turned the setting on, in which case graphOverviewData has
+		// already fetched it once for the whole round (agent/burn_signal.go).
+		if b, ok := burn[n.ID]; ok {
+			m["burn"] = map[string]any{"tool_calls": b.ToolCalls, "tokens": b.InputTokens + b.OutputTokens, "elapsed_s": b.ElapsedSeconds}
 		}
 		// asset_ids is the structured "which assets this direction covers" signal for
 		// dedup; fall back to legacy payload keys (target_ids plural, then target_id
@@ -410,7 +416,6 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 	hidden := func(id int64) bool { _, c := covered[id]; return c && !hotAtRender[id] }
 	const openIntentsCap = 30
 	fr, _ := t.ts.Frontier(openIntentsCap) // priority DESC, id ASC -- the top N by priority; see frontier_open for the real total
-	out["open_intents"] = compactIntents(fr, parentsOf, yieldsOf)
 	all, _ := t.ts.ListByKind(db.KindIntent, 300)
 	var running, recentDone []*db.Node
 	for _, n := range all {
@@ -424,7 +429,24 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 			recentDone = append(recentDone, n) // newest first (all is ordered by id descending); folded ones are already removed and the newest N are taken on output
 		}
 	}
-	out["running_intents"] = compactIntents(running, parentsOf, yieldsOf)
+	// burn_signal_enabled gate (agent/burn_signal.go): off by default, so this
+	// stays a nil map and costs nothing -- compactIntents's burn[n.ID] lookup
+	// on a nil map is a safe no-op (zero value, ok=false). On, it is one
+	// extra query per round covering every open+running intent at once,
+	// never per-intent.
+	var burn map[int64]db.BurnStats
+	if burnSignalEnabled() {
+		ids := make([]int64, 0, len(fr)+len(running))
+		for _, n := range fr {
+			ids = append(ids, n.ID)
+		}
+		for _, n := range running {
+			ids = append(ids, n.ID)
+		}
+		burn, _ = t.ts.BurnStatsByIntent(ids) // best-effort: a query error degrades to no burn data, never blocks the round
+	}
+	out["open_intents"] = compactIntents(fr, parentsOf, yieldsOf, burn)
+	out["running_intents"] = compactIntents(running, parentsOf, yieldsOf, burn)
 	// done_intents_total: the total number of finished intents (done/blocked/exhausted), named in parallel
 	// with recent_done_intents -- the latter is only its most recent truncated window. The two keys side by
 	// side are self-describing ("you are seeing N of the total"), so the planner does not mistake "not shown"
@@ -501,7 +523,7 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 	if len(recentDone) > recentDoneCap {
 		recentDone = recentDone[:recentDoneCap]
 	}
-	out["recent_done_intents"] = compactIntents(recentDone, parentsOf, yieldsOf)
+	out["recent_done_intents"] = compactIntents(recentDone, parentsOf, yieldsOf, nil) // finished work: nothing to kill/steer, burn is never shown
 	// cold-digest SS6.1: the digest bodies of the folded cold region, taking the top N by most recent member
 	// time; digests truncated beyond that are given as bare ids (still expandable with expand_digest), so the
 	// cold region's only exit does not grow without bound.
@@ -783,7 +805,7 @@ func (t *ToolSet) relatedTaskOverviews() []map[string]any {
 			intent.Inherited = true
 			intent.SourceTaskID = source.Task.TaskID
 		}
-		intentResults := compactIntents(recentDone, parentsOf, yieldsOf)
+		intentResults := compactIntents(recentDone, parentsOf, yieldsOf, nil) // inherited finished work: nothing to kill/steer, burn is never shown
 		for i, intent := range recentDone {
 			intentResults[i]["summary"] = budget.take(intentResults[i]["summary"], 400)
 			acts, _, err := ts.ActivityPageForTerminalIntent(intent.ID, 0, 20)
