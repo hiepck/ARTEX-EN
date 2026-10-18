@@ -275,6 +275,11 @@ const (
 	// agent the platform wires up (planner/worker/main agent/chat) have their context compaction taken over by noa, replacing the builtin compaction.
 	// It is read once per run, so toggling it only affects runs started afterwards.
 	settingNoaCompaction = "noa_compaction"
+	// Per-intent resource-burn visibility in graph_overview (tool calls / tokens /
+	// elapsed seconds since claimed). Off by default; read lazily per planner round
+	// via a package-level function variable (agent.BurnSignalEnabled), so toggling
+	// it takes effect on the next round without a rebuild.
+	settingBurnSignalEnabled = "burn_signal_enabled"
 	// defaultWebSearchBackend is used when web search is on but no backend was picked.
 	defaultWebSearchBackend = "ddgs"
 	// deepSeekWebSearchBackend borrows the active LLM profile instead of its own
@@ -503,6 +508,17 @@ func (m *Manager) NoaCompactionEnabled() bool {
 // the resolver reads it per run, so no rebuild is needed.
 func (m *Manager) SetNoaCompaction(on bool) error {
 	return m.pg.SetBool(settingNoaCompaction, on)
+}
+
+// BurnSignalEnabled reports whether per-intent resource-burn visibility is
+// exposed to the planner in graph_overview (off by default; settings.burn_signal_enabled).
+func (m *Manager) BurnSignalEnabled() bool {
+	return m.pg.GetBool(settingBurnSignalEnabled, false)
+}
+
+// SetBurnSignalEnabled persists the burn-signal toggle.
+func (m *Manager) SetBurnSignalEnabled(on bool) error {
+	return m.pg.SetBool(settingBurnSignalEnabled, on)
 }
 
 // LLMPoolEnabled reports whether LLM failover is on (off by default;
