@@ -40,6 +40,10 @@ Regex-based allowlists fail in two distinct, both-common ways:
 
 Both bugs come from the same root cause: treating `*.victim.com` as "ends with victim.com" instead of "ends with a dot, then victim.com, with nothing else before that dot." Any allowlist you can't read the source of, probe both ways: a domain containing the brand as a substring, and a domain missing the required separator.
 
+### Dangling-subdomain allowlist entry
+
+A bypass here needs no pattern bug at all: a hardcoded, exact-match allowlist entry is still exploitable if the subdomain it trusts has gone dangling — CNAMEd to an unprovisioned cloud resource, an expired third-party service, or anything that no longer resolves to infrastructure the defender actually controls. Suspect this when an allowlisted origin looks unfamiliar (a vendor/partner subdomain outside the main app's naming convention) or when subdomain enumeration turns up a CNAME-to-unclaimed-resource among the allowlisted values. If so, an attacker who claims that resource now legitimately owns a domain the allowlist already trusts — confirming and claiming the takeover itself is a different vuln class with its own methodology (see `hunt-subdomain`); this skill's job is only to flag that an allowlist entry sits on takeover-eligible infrastructure and hand the lead off.
+
 ### Simple-request preflight bypass
 
 The browser only sends a CORS preflight (`OPTIONS`) for "non-simple" requests — methods outside GET/HEAD/POST, or headers/content-types outside the simple-request allowlist (`application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain`). If the server's Origin validation logic lives only in the `OPTIONS` handler and the actual `GET`/`POST` handler never re-checks `Origin`, send the real payload as a simple request to skip that validation entirely — e.g. `POST` with `Content-Type: text/plain` carrying a JSON body the backend still happily parses. Compare the `ACAO`/`ACAC` headers (and whether the request is honored at all) between a preflighted `application/json` request and the `text/plain` simple-request equivalent; a gap between them is the bug.
