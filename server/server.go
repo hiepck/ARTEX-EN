@@ -3325,6 +3325,9 @@ func (s *Server) settingsPayload() map[string]any {
 		// of agent the platform wires up have their context compaction taken over by noa,
 		// replacing the builtin compaction; it is read once per run and applies to runs started afterwards.
 		"noa_compaction": s.m.NoaCompactionEnabled(),
+		// Experimental: per-intent resource-burn visibility in graph_overview (off by default); read lazily
+		// each planner round, so a change takes effect immediately with no agent rebuild.
+		"burn_signal_enabled": s.m.BurnSignalEnabled(),
 		// The global settings for finding IM notifications. A channel is an independent resource managed through /api/notify/*;
 		// only the three settings that apply to every channel live here.
 		"notify_enabled":             s.m.pg.GetBool(settingNotifyEnabled, true),
@@ -3397,6 +3400,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		ConstraintsInjectWorker  *bool `json:"constraints_inject_worker"`
 		// Experimental: the noa context compaction switch (off by default); read once per run, applying to runs started afterwards with no agent rebuild.
 		NoaCompaction *bool `json:"noa_compaction"`
+		// Experimental: the burn-signal switch (off by default); read lazily each planner round, so it takes effect immediately with no agent rebuild.
+		BurnSignalEnabled *bool `json:"burn_signal_enabled"`
 		// The global settings for finding IM notifications. All three are read once per round by the delivery engine, so a change takes effect immediately
 		// with no agent rebuild and no restart.
 		NotifyEnabled    *bool   `json:"notify_enabled"`
@@ -3422,6 +3427,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if req.NoaCompaction != nil {
 		// The resolver is read once per run, so a switch takes effect immediately for runs started afterwards, with no applyLLM rebuild.
 		if err := s.m.SetNoaCompaction(*req.NoaCompaction); err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+	}
+	if req.BurnSignalEnabled != nil {
+		if err := s.m.SetBurnSignalEnabled(*req.BurnSignalEnabled); err != nil {
 			writeErr(w, 500, err.Error())
 			return
 		}
