@@ -20,12 +20,13 @@ Fire a polyglot payload — syntactically distinct across engine families — in
 
 | Payload | Engine family it evaluates in |
 |---|---|
-| `${7*7}` | Java EL (JSP/Spring), Velocity, FreeMarker-family |
+| `${7*7}` | Java EL (JSP/Spring), FreeMarker-family |
+| `#set($x=7*7)$x` | Velocity — bare `${7*7}` is not valid VTL (`${}` needs a reference, not an infix expression); this `#set` form is the canonical Velocity detection probe |
 | `{{7*7}}` | Jinja2, Twig, Handlebars-family (strict Handlebars returns it literal/escaped) |
-| `#{7*7}` | Some Ruby templating contexts (Slim); occasionally Thymeleaf link-expression context |
+| `#{7*7}` | Some Ruby templating contexts (Slim); Thymeleaf's `#{...}` is its message/i18n-expression prefix, not evaluated arithmetic |
 | `<%= 7*7 %>` | ERB |
 | `*{7*7}` / `@{7*7}` | Thymeleaf variable/link expressions, distinct from its also-valid `${}` |
-| `{{7*'7'}}` | Jinja2 → `7777777`; Twig → type error — separates Python- from PHP-family `{{}}` engines |
+| `{{7*'7'}}` | Twig → `49` (PHP's loose/automatic type coercion); Jinja2 → `7777777` (Python string-repetition on `int * str`) — separates PHP- from Python-family `{{}}` engines |
 
 A combined differential string such as `${{<%[%'"}}%\` dropped into one field shows which brackets parse, error, or pass through unmodified, narrowing the candidate engine list before spending attempts on any one of them.
 
