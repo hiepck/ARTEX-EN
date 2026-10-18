@@ -1478,6 +1478,61 @@ func (s *ExplorationStore) TokenStatsBySession() ([]SessionTokenUsage, error) {
 	return out, rows.Err()
 }
 
+// BurnStats is the resource-burn figure for one intent (worker session):
+// how many tool calls it has issued, how many tokens it has spent, and how
+// long it has been running, purely as a read-side aggregation over the
+// existing activity log (no write path, no schema change).
+type BurnStats struct {
+	ToolCalls      int
+	InputTokens    int
+	OutputTokens   int
+	ElapsedSeconds float64
+}
+
+// BurnStatsByIntent aggregates per-intent resource burn for the given intent
+// (node) ids, scoped to this exploration. An id with no activity rows at all
+// is OMITTED from the result (never a zero-value entry) -- "no data yet" and
+// "confirmed zero burn" are different things, and only the caller's own
+// not-ok lookup should tell them apart. ToolCalls counts kind IN
+// ('tool_use','tool_result') rows only; the terminal 'result' row is a
+// session summary, not a tool invocation, so it does not count toward it
+// (it still contributes its tokens). len(ids)==0 returns an empty map with
+// no query.
+func (s *ExplorationStore) BurnStatsByIntent(ids []int64) (map[int64]BurnStats, error) {
+	out := map[int64]BurnStats{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, s.expID)
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+2)
+		args = append(args, id)
+	}
+	rows, err := s.db.Query(`SELECT node_id,
+		COUNT(*) FILTER (WHERE kind IN ('tool_use','tool_result')),
+		COALESCE(SUM(input_tokens) FILTER (WHERE kind='result'),0),
+		COALESCE(SUM(output_tokens) FILTER (WHERE kind='result'),0),
+		EXTRACT(EPOCH FROM (now() - MIN(created_at)))
+	FROM activity
+	WHERE exploration_id=$1 AND node_id IN (`+strings.Join(placeholders, ",")+`)
+	GROUP BY node_id`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var b BurnStats
+		if err := rows.Scan(&id, &b.ToolCalls, &b.InputTokens, &b.OutputTokens, &b.ElapsedSeconds); err != nil {
+			return nil, err
+		}
+		out[id] = b
+	}
+	return out, rows.Err()
+}
+
 // ActivityList returns steps after sinceID (exclusive), optionally filtered by node.
 // Returns items and the new cursor (max id seen).
 func (s *ExplorationStore) ActivityList(nodeID *int64, sinceID int64, limit int) ([]Activity, int64, error) {
