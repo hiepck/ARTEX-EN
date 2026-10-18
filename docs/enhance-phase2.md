@@ -101,5 +101,5 @@ configured LLM) remain pending — out of scope for that verification pass.
 
 The umbrella §Phase 2 lists ~14 exotic classes plus a recon pack. This pack
 delivers the five highest-value classes; prototype pollution, mass assignment,
-deserialization, SSTI, XXE, CORS, and subdomain takeover are **deferred** to a
-later pack.
+deserialization, SSTI, XXE, CORS, and subdomain takeover **shipped in Phase 3**
+— see `docs/enhance-phase3.md`.
