@@ -218,6 +218,7 @@ func New(ctx context.Context, m *Manager, skillDir string, dataDir string, keyDi
 			return a.TaskTimeoutWrapupMaxTurns, true
 		}
 		wireAgentAugment(m.pg, s.skillDir, s.hostTools) // assemble the visible skills/MCP + traffic/orchestration host tools into the agent tool sets
+		agent.SkillCatalogDir = func() string { return s.skillDir }
 		domainReg := buildDomainReg(m.Assets())
 		wireTools(m.pg, domainReg) // the builtin tool table: filter by agent + override the description/schema + inject defaults
 		seedPrompts(m.pg)          // seed the builtin agents' default prompt bodies into agent_prompts (only when empty)
@@ -3343,6 +3344,8 @@ func (s *Server) settingsPayload() map[string]any {
 		// report_finding's optional "shares_root_cause_with" parameter + its clustered
 		// root_cause_clusters exposure in graph_overview (off by default); read lazily, no agent rebuild on change.
 		"root_cause_grouping_enabled": s.m.RootCauseGroupingEnabled(),
+		// graph_overview's "unused_relevant_skills" signal (off by default); read lazily, no agent rebuild on change.
+		"skill_relevance_nudge_enabled": s.m.SkillRelevanceNudgeEnabled(),
 		// The global settings for finding IM notifications. A channel is an independent resource managed through /api/notify/*;
 		// only the three settings that apply to every channel live here.
 		"notify_enabled":             s.m.pg.GetBool(settingNotifyEnabled, true),
@@ -3423,6 +3426,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		FactSupersedesEnabled *bool `json:"fact_supersedes_enabled"`
 		// The root-cause-grouping switch (off by default); read lazily each round, so it takes effect immediately with no agent rebuild.
 		RootCauseGroupingEnabled *bool `json:"root_cause_grouping_enabled"`
+		// The skill-relevance-nudge switch (off by default); read lazily each round, so it takes effect immediately with no agent rebuild.
+		SkillRelevanceNudgeEnabled *bool `json:"skill_relevance_nudge_enabled"`
 		// The global settings for finding IM notifications. All three are read once per round by the delivery engine, so a change takes effect immediately
 		// with no agent rebuild and no restart.
 		NotifyEnabled    *bool   `json:"notify_enabled"`
@@ -3472,6 +3477,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.RootCauseGroupingEnabled != nil {
 		if err := s.m.SetRootCauseGroupingEnabled(*req.RootCauseGroupingEnabled); err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+	}
+	if req.SkillRelevanceNudgeEnabled != nil {
+		if err := s.m.SetSkillRelevanceNudgeEnabled(*req.SkillRelevanceNudgeEnabled); err != nil {
 			writeErr(w, 500, err.Error())
 			return
 		}

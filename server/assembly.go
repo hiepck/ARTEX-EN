@@ -215,6 +215,7 @@ func wireTools(pg *db.DB, domainReg map[string]actool.CoreTool) {
 	agent.ReachabilityEdgesEnabled = func() bool { return pg.GetBool(settingReachabilityEdges, false) }
 	agent.FactSupersedesEnabled = func() bool { return pg.GetBool(settingFactSupersedes, false) }
 	agent.RootCauseGroupingEnabled = func() bool { return pg.GetBool(settingRootCauseGrouping, false) }
+	agent.SkillRelevanceNudgeEnabled = func() bool { return pg.GetBool(settingSkillRelevanceNudge, false) }
 	// Seed the built-in domain tools (first-insert only; DO NOTHING preserves edits).
 	// No startup prune: rows we didn't seed are left alone so future user-defined
 	// custom tools (system=false, added via the UI) survive restarts.

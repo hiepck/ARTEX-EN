@@ -938,6 +938,7 @@ CREATE TABLE IF NOT EXISTS skill_usage (
 );
 CREATE INDEX IF NOT EXISTS idx_skill_usage_skill ON skill_usage(skill, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_skill_usage_task  ON skill_usage(task_id);
+CREATE INDEX IF NOT EXISTS idx_skill_usage_exploration ON skill_usage(exploration_id, found);
 
 -- The tool call ledger (see db/tool_usage.go). One row per actual CoreTool.Call, recording only the
 -- attribution dimensions, never the tool arguments or return value. Deliberately without foreign keys, so the statistics survive after a task, session or custom tool is deleted.

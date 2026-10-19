@@ -295,6 +295,11 @@ const (
 	// by default; read lazily via a package-level function variable
 	// (agent.RootCauseGroupingEnabled).
 	settingRootCauseGrouping = "root_cause_grouping_enabled"
+	// graph_overview's "unused_relevant_skills" signal: skills whose name/description
+	// shares vocabulary with the task's goal(s) but have never been successfully
+	// invoked in this exploration. Off by default; read lazily via a package-level
+	// function variable (agent.SkillRelevanceNudgeEnabled).
+	settingSkillRelevanceNudge = "skill_relevance_nudge_enabled"
 	// defaultWebSearchBackend is used when web search is on but no backend was picked.
 	defaultWebSearchBackend = "ddgs"
 	// deepSeekWebSearchBackend borrows the active LLM profile instead of its own
@@ -571,6 +576,17 @@ func (m *Manager) RootCauseGroupingEnabled() bool {
 // SetRootCauseGroupingEnabled persists the root-cause-grouping toggle.
 func (m *Manager) SetRootCauseGroupingEnabled(on bool) error {
 	return m.pg.SetBool(settingRootCauseGrouping, on)
+}
+
+// SkillRelevanceNudgeEnabled reports whether graph_overview's "unused_relevant_skills"
+// signal is active (off by default; settings.skill_relevance_nudge_enabled).
+func (m *Manager) SkillRelevanceNudgeEnabled() bool {
+	return m.pg.GetBool(settingSkillRelevanceNudge, false)
+}
+
+// SetSkillRelevanceNudgeEnabled persists the skill-relevance-nudge toggle.
+func (m *Manager) SetSkillRelevanceNudgeEnabled(on bool) error {
+	return m.pg.SetBool(settingSkillRelevanceNudge, on)
 }
 
 // LLMPoolEnabled reports whether LLM failover is on (off by default;
