@@ -1165,6 +1165,34 @@ DROP TRIGGER IF EXISTS trg_conversation_retest_delete ON conversations;
 CREATE TRIGGER trg_conversation_retest_delete BEFORE DELETE ON conversations
     FOR EACH ROW EXECUTE FUNCTION stop_deleted_conversation_retest();
 
+CREATE TABLE IF NOT EXISTS task_submission_reviews (
+    id BIGSERIAL PRIMARY KEY,
+    task_id BIGINT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    conversation_id BIGINT UNIQUE REFERENCES conversations(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','completed','failed','stopped')),
+    notes TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    error TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at TIMESTAMPTZ,
+    finished_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_task_submission_reviews_history ON task_submission_reviews(task_id, id DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_task_submission_reviews_active ON task_submission_reviews(task_id)
+    WHERE status IN ('pending','running');
+
+-- Deleting a session keeps the review records and releases any review still in progress.
+CREATE OR REPLACE FUNCTION stop_deleted_conversation_task_review() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE task_submission_reviews SET status='stopped', error='the review session was deleted', finished_at=now()
+    WHERE conversation_id=OLD.id AND status IN ('pending','running');
+    RETURN OLD;
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_conversation_task_review_delete ON conversations;
+CREATE TRIGGER trg_conversation_task_review_delete BEFORE DELETE ON conversations
+    FOR EACH ROW EXECUTE FUNCTION stop_deleted_conversation_task_review();
+
 ALTER TABLE findings ADD COLUMN IF NOT EXISTS evidence_version BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE findings ADD COLUMN IF NOT EXISTS report_evidence_version BIGINT NOT NULL DEFAULT 0;
 
