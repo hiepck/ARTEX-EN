@@ -3337,6 +3337,9 @@ func (s *Server) settingsPayload() map[string]any {
 		// report_finding's evidence-gated "reaches" parameter + its asset_edges exposure
 		// in graph_overview (off by default); read lazily, no agent rebuild on change.
 		"reachability_edges_enabled": s.m.ReachabilityEdgesEnabled(),
+		// record_fact's evidence-gated "supersedes" parameter + its fact_supersedes
+		// exposure in graph_overview (off by default); read lazily, no agent rebuild on change.
+		"fact_supersedes_enabled": s.m.FactSupersedesEnabled(),
 		// The global settings for finding IM notifications. A channel is an independent resource managed through /api/notify/*;
 		// only the three settings that apply to every channel live here.
 		"notify_enabled":             s.m.pg.GetBool(settingNotifyEnabled, true),
@@ -3413,6 +3416,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		BurnSignalEnabled *bool `json:"burn_signal_enabled"`
 		// The reachability-edges switch (off by default); read lazily each round, so it takes effect immediately with no agent rebuild.
 		ReachabilityEdgesEnabled *bool `json:"reachability_edges_enabled"`
+		// The fact-supersedes switch (off by default); read lazily each round, so it takes effect immediately with no agent rebuild.
+		FactSupersedesEnabled *bool `json:"fact_supersedes_enabled"`
 		// The global settings for finding IM notifications. All three are read once per round by the delivery engine, so a change takes effect immediately
 		// with no agent rebuild and no restart.
 		NotifyEnabled    *bool   `json:"notify_enabled"`
@@ -3450,6 +3455,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ReachabilityEdgesEnabled != nil {
 		if err := s.m.SetReachabilityEdgesEnabled(*req.ReachabilityEdgesEnabled); err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+	}
+	if req.FactSupersedesEnabled != nil {
+		if err := s.m.SetFactSupersedesEnabled(*req.FactSupersedesEnabled); err != nil {
 			writeErr(w, 500, err.Error())
 			return
 		}

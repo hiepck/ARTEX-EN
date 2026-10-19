@@ -37,6 +37,7 @@ const (
 	RelYields      = "yields"
 	RelProves      = "proves"
 	RelCovers      = "covers" // digest --covers--> member (cold-digest-spec §1); source of truth for "which digest folds node X"
+	RelSupersedes  = "supersedes" // fact --supersedes--> fact: a later fact overturns an earlier one's conclusion (this exploration only)
 )
 
 // Asset-edge relations (asset_edges.rel) -- a different table and vocabulary

@@ -284,6 +284,11 @@ const (
 	// row) and its exposure in graph_overview. Off by default; read lazily via a
 	// package-level function variable (agent.ReachabilityEdgesEnabled).
 	settingReachabilityEdges = "reachability_edges_enabled"
+	// record_fact's optional "supersedes" parameter (an evidence-gated
+	// exploration_edges row linking a fact to the earlier fact it overturns) and
+	// its exposure in graph_overview. Off by default; read lazily via a
+	// package-level function variable (agent.FactSupersedesEnabled).
+	settingFactSupersedes = "fact_supersedes_enabled"
 	// defaultWebSearchBackend is used when web search is on but no backend was picked.
 	defaultWebSearchBackend = "ddgs"
 	// deepSeekWebSearchBackend borrows the active LLM profile instead of its own
@@ -538,6 +543,17 @@ func (m *Manager) ReachabilityEdgesEnabled() bool {
 // SetReachabilityEdgesEnabled persists the reachability-edges toggle.
 func (m *Manager) SetReachabilityEdgesEnabled(on bool) error {
 	return m.pg.SetBool(settingReachabilityEdges, on)
+}
+
+// FactSupersedesEnabled reports whether record_fact's evidence-gated
+// "supersedes" parameter is active (off by default; settings.fact_supersedes_enabled).
+func (m *Manager) FactSupersedesEnabled() bool {
+	return m.pg.GetBool(settingFactSupersedes, false)
+}
+
+// SetFactSupersedesEnabled persists the fact-supersedes toggle.
+func (m *Manager) SetFactSupersedesEnabled(on bool) error {
+	return m.pg.SetBool(settingFactSupersedes, on)
 }
 
 // LLMPoolEnabled reports whether LLM failover is on (off by default;
