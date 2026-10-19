@@ -376,6 +376,10 @@ func NewManager(dir, proxyAddr string) (*Manager, error) {
 		pg.Close()
 		return nil, fmt.Errorf("recover finding retests: %w", err)
 	}
+	if err := pg.RecoverTaskSubmissionReviews(); err != nil {
+		pg.Close()
+		return nil, fmt.Errorf("recover task submission reviews: %w", err)
+	}
 	if err := pg.EnsureLLMRecordsTable(); err != nil {
 		log.Printf("[llmrec] create table: %v", err)
 	}

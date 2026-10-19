@@ -225,6 +225,9 @@ func New(ctx context.Context, m *Manager, skillDir string, dataDir string, keyDi
 		if err := s.seedFindingRetester(); err != nil {
 			log.Printf("[retester] seed: %v", err)
 		}
+		if err := s.seedTaskSubmissionReviewer(); err != nil {
+			log.Printf("[triager] seed: %v", err)
+		}
 		go s.evidenceStore().RunGC(s.ctx)
 		s.seedPythonInterpreter()     // custom script tools: detect the python interpreter at startup and store it (only when empty)
 		go newScheduler(s).Run(s.ctx) // P3 trigger scheduling (timed/finding/goal events), custom agents only
@@ -768,6 +771,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/exploration/findings/{id}/retests", s.listFindingRetests)
 	mux.HandleFunc("GET /api/exploration/findings/retests/active", s.listActiveFindingRetests)
 	mux.HandleFunc("POST /api/exploration/findings/{id}/retests", s.startFindingRetest)
+	mux.HandleFunc("GET /api/tasks/{id}/findings/reviews", s.listTaskSubmissionReviews)
+	mux.HandleFunc("GET /api/tasks/findings/reviews/active", s.listActiveTaskSubmissionReviews)
+	mux.HandleFunc("POST /api/tasks/{id}/findings/review", s.startTaskSubmissionReview)
 	mux.HandleFunc("PATCH /api/exploration/findings/{id}", s.patchFinding)
 	mux.HandleFunc("DELETE /api/exploration/findings/{id}", s.deleteFinding)
 	mux.HandleFunc("GET /api/exploration/intents", s.intents)

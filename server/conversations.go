@@ -501,9 +501,10 @@ func (s *Server) runConversationTurn(ctx context.Context, cancel context.CancelC
 		delete(s.chatCancel, busyKey)
 		s.chatMu.Unlock()
 	}()
-	// Only the first turn executes a historical retest. Follow-up conversation
-	// turns may explain the sealed result; the result tool refuses to overwrite it.
-	finishStatus, finishReason := "failed", "the retest could not be started"
+	// Only the first turn executes a historical retest/review. Follow-up
+	// conversation turns may explain the sealed result; the result tool refuses
+	// to overwrite it.
+	finishStatus, finishReason := "failed", "the session could not be started"
 	if c.AgentKey == db.FindingRetestAgentKey {
 		// Read without the run cancellation so an immediate stop still seals pending.
 		r, err := s.m.pg.FindingRetestForConversation(context.Background(), c.ID)
@@ -527,6 +528,35 @@ func (s *Server) runConversationTurn(ctx context.Context, cancel context.CancelC
 				return
 			}
 			started, err := s.m.pg.StartFindingRetest(ctx, r.ID)
+			if err != nil {
+				finishReason = err.Error()
+				return
+			}
+			if !started {
+				return
+			}
+		}
+	} else if c.AgentKey == db.TaskSubmissionReviewAgentKey {
+		// Read without the run cancellation so an immediate stop still seals pending.
+		r, err := s.m.pg.TaskSubmissionReviewForConversation(context.Background(), c.ID)
+		if err != nil {
+			log.Printf("[conv %d] load review: %v", c.ID, err)
+			if err := s.m.pg.FailPendingTaskSubmissionReviewForConversation(c.ID, "failed to read the review state, please start it again"); err != nil {
+				log.Printf("[conv %d] seal review: %v", c.ID, err)
+			}
+			return
+		}
+		if r != nil && r.Status == "pending" {
+			defer func() {
+				if ctx.Err() != nil {
+					finishStatus, finishReason = "stopped", "the review was stopped or the service shut down"
+				}
+				s.finishTaskSubmissionReview(r.ID, finishStatus, finishReason)
+			}()
+			if ctx.Err() != nil {
+				return
+			}
+			started, err := s.m.pg.StartTaskSubmissionReview(ctx, r.ID)
 			if err != nil {
 				finishReason = err.Error()
 				return
