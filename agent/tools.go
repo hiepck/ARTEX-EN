@@ -1250,6 +1250,7 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 	return writeTool("report_finding", "Record a confirmed finding, using evidence to supply verifiable proof such as command output or logs. In task context, pass the current intent_id. The returned finding_id is the standalone finding record ID and finding_node_id is the exploration node ID (the first line keeps that node number).", obj(map[string]any{
 		"vulnclass": str("the vulnerability class"), "name": str("the finding name"), "severity": str("critical|high|medium|low"), "summary": str("a summary of the finding"),
 		"intent_id": idp("the current task's intent id"), "asset_ids": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "the affected asset ids"},
+		"reaches":          map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "optional: other asset ids this finding's asset(s) (asset_ids) can reach -- e.g. via SSRF, a pivot, or a leaked credential's scope. Requires verified traffic_refs or evidence_hint_id on this same call: a reaches claim with no evidence is rejected outright, not silently dropped."},
 		"evidence":         str("the evidence / PoC text"),
 		"evidence_hint_id": idp("optional: the id of the hint node in this task corresponding to this finding, which automatically carries its structured traffic_refs; an inherited hint or another finding's hint cannot be referenced"),
 		"traffic_refs": map[string]any{"type": "array", "description": "optional; for an HTTP/HTTPS finding, first search and verify entry by entry that the request/response really supports the conclusion, then fill in the real IDs in reproduction order. For a non-HTTP finding such as TCP, or when nothing was captured or no exact record matches, omit it or pass [] -- that does not block reporting; state the reason in evidence and supply other verifiable proof. Do not guess IDs, do not infer a link from the domain/time, and do not re-probe just to produce a capture. Roles: baseline (a normal control) / proof (proof of the vulnerability) / verification (supplementary verification) / supporting (supporting evidence).",
@@ -1259,6 +1260,7 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 			VulnClass, Name, Severity, Summary, Evidence string
 			IntentID                                     json.RawMessage   `json:"intent_id"`
 			AssetIDs                                     []json.RawMessage `json:"asset_ids"`
+			Reaches                                      []json.RawMessage `json:"reaches"`
 			TrafficRefs                                  []db.TrafficRef   `json:"traffic_refs"`
 			EvidenceHintID                               json.RawMessage   `json:"evidence_hint_id"`
 		}
@@ -1283,6 +1285,17 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 		if err != nil {
 			return actool.Errorf(err.Error()), nil
 		}
+		if len(a.Reaches) > 0 {
+			if !reachabilityEdgesEnabled() {
+				return actool.Errorf("reachability edges are disabled; omit reaches, or ask an operator to enable reachability_edges_enabled"), nil
+			}
+			if len(refs) == 0 {
+				return actool.Errorf("reaches requires verified evidence (traffic_refs or evidence_hint_id) on this same call -- a reachability claim needs real proof, it cannot ride along on an unevidenced finding"), nil
+			}
+			if len(a.AssetIDs) == 0 {
+				return actool.Errorf("reaches requires asset_ids as the source of the reachability edge"), nil
+			}
+		}
 		input := db.RecordFindingInput{TaskID: t.taskID, ExplorationID: t.ts.ID(), IntentID: pid(a.IntentID), VulnClass: a.VulnClass, Name: a.Name, Severity: a.Severity, Summary: a.Summary, Evidence: a.Evidence, Worker: t.worker, AssetIDs: pidList(a.AssetIDs)}
 		var recorded *db.RecordedFinding
 		if t.findingRecorder != nil {
@@ -1305,6 +1318,17 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 			t.notify()
 		}
 		t.writes.Findings++
+		if len(a.Reaches) > 0 {
+			srcs, dsts := pidList(a.AssetIDs), pidList(a.Reaches)
+			for _, src := range srcs {
+				for _, dst := range dsts {
+					if src <= 0 || dst <= 0 || src == dst {
+						continue
+					}
+					_ = t.ts.AddAssetEdge(src, db.AssetRelCanReach, dst) // best-effort: the finding itself is already recorded and must not be undone by an edge-write hiccup
+				}
+			}
+		}
 		// Keep the first line's node-ID contract for existing reporter triggers.
 		for i := range recorded.Traffic.Bindings {
 			recorded.Traffic.Bindings[i].Snapshot.ReqHead = ""
