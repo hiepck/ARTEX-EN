@@ -1279,9 +1279,10 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 	return writeTool("report_finding", "Record a confirmed finding, using evidence to supply verifiable proof such as command output or logs. In task context, pass the current intent_id. The returned finding_id is the standalone finding record ID and finding_node_id is the exploration node ID (the first line keeps that node number).", obj(map[string]any{
 		"vulnclass": str("the vulnerability class"), "name": str("the finding name"), "severity": str("critical|high|medium|low"), "summary": str("a summary of the finding"),
 		"intent_id": idp("the current task's intent id"), "asset_ids": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "the affected asset ids"},
-		"reaches":          map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "optional: other asset ids this finding's asset(s) (asset_ids) can reach -- e.g. via SSRF, a pivot, or a leaked credential's scope. Requires verified traffic_refs or evidence_hint_id on this same call: a reaches claim with no evidence is rejected outright, not silently dropped."},
-		"evidence":         str("the evidence / PoC text"),
-		"evidence_hint_id": idp("optional: the id of the hint node in this task corresponding to this finding, which automatically carries its structured traffic_refs; an inherited hint or another finding's hint cannot be referenced"),
+		"reaches":                map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "optional: other asset ids this finding's asset(s) (asset_ids) can reach -- e.g. via SSRF, a pivot, or a leaked credential's scope. Requires verified traffic_refs or evidence_hint_id on this same call: a reaches claim with no evidence is rejected outright, not silently dropped."},
+		"shares_root_cause_with": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "optional: ids of earlier confirmed findings in this task that trace back to the exact same underlying flaw as this one (e.g. the same leaked credential, the same missing authorization check, the same unauthenticated config) -- a different exploitation path or impact of an already-reported cause, not a new one. This finding is still recorded in full either way; the link only helps the planner and future workers see the cluster instead of treating it as unrelated."},
+		"evidence":               str("the evidence / PoC text"),
+		"evidence_hint_id":       idp("optional: the id of the hint node in this task corresponding to this finding, which automatically carries its structured traffic_refs; an inherited hint or another finding's hint cannot be referenced"),
 		"traffic_refs": map[string]any{"type": "array", "description": "optional; for an HTTP/HTTPS finding, first search and verify entry by entry that the request/response really supports the conclusion, then fill in the real IDs in reproduction order. For a non-HTTP finding such as TCP, or when nothing was captured or no exact record matches, omit it or pass [] -- that does not block reporting; state the reason in evidence and supply other verifiable proof. Do not guess IDs, do not infer a link from the domain/time, and do not re-probe just to produce a capture. Roles: baseline (a normal control) / proof (proof of the vulnerability) / verification (supplementary verification) / supporting (supporting evidence).",
 			"items": obj(map[string]any{"traffic_id": str("a real traffic ID returned by traffic_search"), "role": map[string]any{"type": "string", "enum": []string{"baseline", "proof", "verification", "supporting"}}, "note": str("how this traffic supports the conclusion")}, "traffic_id")},
 	}, "vulnclass", "severity", "summary"), func(ctx context.Context, in json.RawMessage) (actool.Result, error) {
@@ -1290,6 +1291,7 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 			IntentID                                     json.RawMessage   `json:"intent_id"`
 			AssetIDs                                     []json.RawMessage `json:"asset_ids"`
 			Reaches                                      []json.RawMessage `json:"reaches"`
+			SharesRootCauseWith                          []json.RawMessage `json:"shares_root_cause_with"`
 			TrafficRefs                                  []db.TrafficRef   `json:"traffic_refs"`
 			EvidenceHintID                               json.RawMessage   `json:"evidence_hint_id"`
 		}
@@ -1325,6 +1327,18 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 				return actool.Errorf("reaches requires asset_ids as the source of the reachability edge"), nil
 			}
 		}
+		sharesRootCause := pidList(a.SharesRootCauseWith)
+		if len(sharesRootCause) > 0 {
+			if !rootCauseGroupingEnabled() {
+				return actool.Errorf("root-cause grouping is disabled; omit shares_root_cause_with, or ask an operator to enable root_cause_grouping_enabled"), nil
+			}
+			for _, oldID := range sharesRootCause {
+				n, err := t.ts.GetNode(oldID)
+				if err != nil || n == nil || n.Kind != db.KindFinding {
+					return actool.Errorf(fmt.Sprintf("shares_root_cause_with id %d does not exist as a finding of this task", oldID)), nil
+				}
+			}
+		}
 		input := db.RecordFindingInput{TaskID: t.taskID, ExplorationID: t.ts.ID(), IntentID: pid(a.IntentID), VulnClass: a.VulnClass, Name: a.Name, Severity: a.Severity, Summary: a.Summary, Evidence: a.Evidence, Worker: t.worker, AssetIDs: pidList(a.AssetIDs)}
 		var recorded *db.RecordedFinding
 		if t.findingRecorder != nil {
@@ -1357,6 +1371,9 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 					_ = t.ts.AddAssetEdge(src, db.AssetRelCanReach, dst) // best-effort: the finding itself is already recorded and must not be undone by an edge-write hiccup
 				}
 			}
+		}
+		for _, oldID := range sharesRootCause {
+			_ = t.ts.Link(recorded.NodeID, db.RelSharesRootCause, oldID) // best-effort: the finding itself is already recorded and must not be undone by an edge-write hiccup
 		}
 		// Keep the first line's node-ID contract for existing reporter triggers.
 		for i := range recorded.Traffic.Bindings {
