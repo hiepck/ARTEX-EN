@@ -148,6 +148,8 @@ func TestReviewValidation(t *testing.T) {
 	if _, _, _, err := d.CreateTaskSubmissionReview(ctx, taskID, ""); err == nil {
 		t.Fatal("cancelled creation succeeded")
 	}
+	// Unscoped writes (no matching running conversation) are rejected regardless
+	// of content -- this proves nothing about the length cap specifically.
 	for _, s := range []string{"", strings.Repeat("x", 128001)} {
 		if err := d.RecordTaskSubmissionReviewResult(t.Context(), 0, s); err == nil {
 			t.Fatal("bad result accepted, len", len(s))
@@ -155,5 +157,26 @@ func TestReviewValidation(t *testing.T) {
 	}
 	if _, _, _, err := d.CreateTaskSubmissionReview(t.Context(), 999999999, ""); err == nil {
 		t.Fatal("review created for a nonexistent task")
+	}
+
+	// The length cap, proven discriminating against a real running conversation:
+	// an empty summary and an oversized one are both rejected, a summary right at
+	// the boundary is accepted.
+	r, _, _, err := d.CreateTaskSubmissionReview(t.Context(), taskID, "cap check")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.StartTaskSubmissionReview(t.Context(), r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.RecordTaskSubmissionReviewResult(t.Context(), *r.ConversationID, strings.Repeat("x", 128001)); err == nil {
+		t.Fatal("oversized summary accepted on a running conversation")
+	}
+	if err := d.RecordTaskSubmissionReviewResult(t.Context(), *r.ConversationID, strings.Repeat("x", 128000)); err != nil {
+		t.Fatal("summary at the exact cap rejected", err)
+	}
+	full, err := d.TaskSubmissionReviewForConversation(t.Context(), *r.ConversationID)
+	if err != nil || len(full.Summary) != 128000 {
+		t.Fatalf("boundary summary not saved: len=%d err=%v", len(full.Summary), err)
 	}
 }
