@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/Autumn-27/artex/db"
 	acperm "github.com/Autumn-27/norma/permission"
+	"github.com/Autumn-27/norma/skill"
 	actool "github.com/Autumn-27/norma/tool"
 )
 
@@ -471,6 +473,65 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 			clusters = append(clusters, map[string]any{"finding_ids": members})
 		}
 		out["root_cause_clusters"] = clusters
+	}
+	// unused_relevant_skills: skills whose name/description shares meaningful
+	// vocabulary with this task's goal(s) but have never been successfully
+	// invoked in this exploration. A coarse word-overlap heuristic, not a
+	// classifier -- it only ever adds a suggestion, never blocks anything.
+	if skillRelevanceNudgeEnabled() {
+		const minSkillMatchTokens = 2
+		const maxSkillSuggestions = 5
+		sug := make([]map[string]any, 0)
+		if dir := skillCatalogDir(); dir != "" {
+			if reg, err := skill.LoadDir(dir); err == nil && reg != nil {
+				invoked, _ := t.ts.InvokedSkills() // best-effort: a lookup error just means nothing gets suppressed this round
+				goalTokens := map[string]bool{}
+				if _, goalText, err := t.ts.Root(); err == nil {
+					addTokens(goalTokens, goalText)
+				}
+				for _, g := range gsum {
+					if text, _ := g["text"].(string); text != "" {
+						addTokens(goalTokens, text)
+					}
+					if vc, _ := g["vulnclass"].(string); vc != "" {
+						addTokens(goalTokens, vc)
+					}
+				}
+				type scoredSkill struct {
+					name    string
+					score   int
+					matched []string
+				}
+				var candidates []scoredSkill
+				for _, sk := range reg.List() {
+					name := filepath.Base(sk.Dir)
+					if invoked[name] {
+						continue
+					}
+					skillTokens := map[string]bool{}
+					addTokens(skillTokens, strings.ReplaceAll(name, "-", " "))
+					addTokens(skillTokens, sk.Description)
+					var matched []string
+					for tok := range goalTokens {
+						if skillTokens[tok] {
+							matched = append(matched, tok)
+						}
+					}
+					if len(matched) >= minSkillMatchTokens {
+						sort.Strings(matched)
+						candidates = append(candidates, scoredSkill{name, len(matched), matched})
+					}
+				}
+				sort.Slice(candidates, func(i, j int) bool { return candidates[i].score > candidates[j].score })
+				if len(candidates) > maxSkillSuggestions {
+					candidates = candidates[:maxSkillSuggestions]
+				}
+				for _, c := range candidates {
+					sug = append(sug, map[string]any{"skill": c.name, "matched_terms": c.matched})
+				}
+			}
+		}
+		out["unused_relevant_skills"] = sug
 	}
 	// cold-digest §6: members folded into an active digest are shown via cold_digests
 	// (below), not the flat recent_* lists. `covered` maps member id → its digest id.

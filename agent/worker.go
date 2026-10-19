@@ -336,6 +336,7 @@ func renderWorkerGraphOverview(data map[string]any) string {
 		"Below is the current exploration overview of the whole task. It serves two purposes: knowing what others have already found so you do not duplicate it, and letting you connect your own intent to the bigger picture while exploring it.\n" +
 		"**Thinking broadly is good**: think deeply and associate freely while exploring this intent. The only line is this -- do not actually go and execute a different intent (that is another worker's job, scheduled by the planner). Whenever you think of a valuable lead (a cross-asset interaction, what looks like the entry to another exploitation chain, a suspicious point at the global level), **you must write it into a fact and hand it to the planner** -- that is an important part of your output, not an optional extra. Better to report one more and let the planner judge than to keep it to yourself.\n" +
 		"If root_cause_clusters below already covers the asset/credential/flaw you are about to report on, prefer referencing it with report_finding's shares_root_cause_with over filing an unrelated-looking new finding -- this snapshot was taken when this intent started and will not reflect links made since.\n" +
+		"If unused_relevant_skills below names something that matches what you're actually doing right now, consider invoking it with the Skill tool -- it is a coarse keyword match, not a certainty, and this snapshot was taken when this intent started.\n" +
 		string(b)
 }
 
