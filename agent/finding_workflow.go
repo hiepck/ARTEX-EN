@@ -44,7 +44,7 @@ func findingWorkflowTools(agentKey string, tools []actool.CoreTool) ([]actool.Co
 			}
 			out = append(out, tool)
 		}
-		return out, ""
+		return stripReachesIfDisabled(out), ""
 	}
 	out := append([]actool.CoreTool(nil), tools...)
 	has := map[string]bool{}
@@ -79,7 +79,35 @@ func findingWorkflowTools(agentKey string, tools []actool.CoreTool) ([]actool.Co
 	if guidance != "" || has["get_finding_traffic"] || has["update_finding_report"] {
 		guidance += findingIDGuidance
 	}
-	return out, guidance
+	return stripReachesIfDisabled(out), guidance
+}
+
+// stripReachesIfDisabled removes report_finding's "reaches" parameter when
+// reachability_edges_enabled is off. Independent of findingTrafficBindingEnabled
+// above -- the two settings are configured and checked separately, even though
+// Task 3's handler additionally requires traffic binding to be on before a
+// reaches claim can carry evidence.
+func stripReachesIfDisabled(tools []actool.CoreTool) []actool.CoreTool {
+	if reachabilityEdgesEnabled() {
+		return tools
+	}
+	out := make([]actool.CoreTool, len(tools))
+	for i, tool := range tools {
+		if tool.Name() != "report_finding" {
+			out[i] = tool
+			continue
+		}
+		raw, _ := json.Marshal(tool.InputSchema())
+		var schema map[string]any
+		if json.Unmarshal(raw, &schema) == nil {
+			if props, ok := schema["properties"].(map[string]any); ok {
+				delete(props, "reaches")
+			}
+			tool = DecorateTool(tool, tool.Description(), schema)
+		}
+		out[i] = tool
+	}
+	return out
 }
 
 func stripTrafficParameters(schema map[string]any) {
