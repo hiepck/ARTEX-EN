@@ -366,7 +366,7 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 	for _, g := range goals {
 		var p map[string]any
 		_ = json.Unmarshal(g.Payload, &p)
-		gsum = append(gsum, map[string]any{"id": g.ID, "state": g.State, "text": p["text"]})
+		gsum = append(gsum, map[string]any{"id": g.ID, "state": g.State, "text": p["text"], "vulnclass": p["vulnclass"]})
 	}
 	out["goals"] = gsum
 	// hints: strategic hints attached to the graph by the human / main agent via add_hint; folded in so the

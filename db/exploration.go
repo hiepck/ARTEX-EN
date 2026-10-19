@@ -1041,6 +1041,26 @@ func (s *ExplorationStore) Edges(limit int) ([]Edge, error) {
 	return out, rows.Err()
 }
 
+// InvokedSkills returns the set of skill directory names successfully invoked
+// (found=true) anywhere in this exploration so far -- used to suppress a
+// skill-relevance suggestion for something already tried.
+func (s *ExplorationStore) InvokedSkills() (map[string]bool, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT skill FROM skill_usage WHERE exploration_id=$1 AND found`, s.expID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out[name] = true
+	}
+	return out, rows.Err()
+}
+
 // FactsYielded returns the ids of fact nodes an intent produced (intent --yields-->
 // fact), oldest first. Used to spell out the round's incremental facts to the planner
 // alongside the finished worker's output. Best-effort: returns nil for an intent with
