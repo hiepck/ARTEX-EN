@@ -382,6 +382,17 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 		hsum = append(hsum, hint)
 	}
 	out["hints"] = hsum
+	// asset_reachability: evidence-gated can_reach edges between assets
+	// (agent/tools.go's report_finding "reaches" param), independent of the
+	// exploration-node lineage below -- a different table, a different axis.
+	if reachabilityEdgesEnabled() {
+		assetEdges, _ := t.ts.AssetEdges(0) // best-effort: a query error degrades to no reachability data, never blocks the round
+		reach := make([]map[string]any, 0, len(assetEdges))
+		for _, e := range assetEdges {
+			reach = append(reach, map[string]any{"src_asset_id": e.SrcAssetID, "rel": e.Rel, "dst_asset_id": e.DstAssetID})
+		}
+		out["asset_reachability"] = reach
+	}
 	// lineage from the exploration edges: an intent's parents (what it
 	// derived_from — possibly several facts combined) and its yields (the
 	// facts/findings it produced). factFrom maps a fact → the intent that
