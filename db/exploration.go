@@ -982,6 +982,45 @@ type Edge struct {
 }
 
 // Edges lists exploration edges (for graph viz).
+// AssetEdge is one row from asset_edges (reachability relations between two
+// assets, scoped per exploration).
+type AssetEdge struct {
+	SrcAssetID int64
+	Rel        string
+	DstAssetID int64
+}
+
+// AddAssetEdge records a reachability edge between two assets, scoped to
+// this exploration. Idempotent: re-recording the same (src, rel, dst) is a
+// safe no-op (the composite primary key dedups it).
+func (s *ExplorationStore) AddAssetEdge(srcAssetID int64, rel string, dstAssetID int64) error {
+	_, err := s.db.Exec(`INSERT INTO asset_edges(exploration_id, src_asset_id, rel, dst_asset_id)
+		VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`, s.expID, srcAssetID, rel, dstAssetID)
+	return err
+}
+
+// AssetEdges returns up to limit reachability edges recorded for this
+// exploration (default 5000, mirroring Edges).
+func (s *ExplorationStore) AssetEdges(limit int) ([]AssetEdge, error) {
+	if limit <= 0 {
+		limit = 5000
+	}
+	rows, err := s.db.Query(`SELECT src_asset_id, rel, dst_asset_id FROM asset_edges WHERE exploration_id=$1 LIMIT $2`, s.expID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AssetEdge
+	for rows.Next() {
+		var e AssetEdge
+		if err := rows.Scan(&e.SrcAssetID, &e.Rel, &e.DstAssetID); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func (s *ExplorationStore) Edges(limit int) ([]Edge, error) {
 	if limit <= 0 {
 		limit = 5000

@@ -38,3 +38,9 @@ const (
 	RelProves      = "proves"
 	RelCovers      = "covers" // digest --covers--> member (cold-digest-spec §1); source of truth for "which digest folds node X"
 )
+
+// Asset-edge relations (asset_edges.rel) -- a different table and vocabulary
+// from the exploration_edges Rel* constants above; do not conflate the two.
+const (
+	AssetRelCanReach = "can_reach"
+)

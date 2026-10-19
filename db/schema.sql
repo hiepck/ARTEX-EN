@@ -281,6 +281,24 @@ CREATE TABLE IF NOT EXISTS exploration_anchors (
 );
 CREATE INDEX IF NOT EXISTS idx_anchor_asset ON exploration_anchors(asset_id);
 
+-- asset_edges: reachability/privilege relations between two assets, scoped per
+-- exploration. A separate table from exploration_edges (which is scoped to
+-- reasoning nodes, not assets) -- see W2 design doc. Evidence-gated at the
+-- tool-call layer (agent/tools.go's report_finding "reaches" param), never
+-- written on the honor system alone.
+CREATE TABLE IF NOT EXISTS asset_edges (
+    exploration_id BIGINT NOT NULL REFERENCES explorations(id) ON DELETE CASCADE,
+    src_asset_id   BIGINT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    rel            TEXT NOT NULL,
+    dst_asset_id   BIGINT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (exploration_id, src_asset_id, rel, dst_asset_id),
+    CONSTRAINT ck_asset_edge_noself CHECK (src_asset_id <> dst_asset_id),
+    CONSTRAINT ck_asset_edge_rel CHECK (rel IN ('can_reach'))
+);
+CREATE INDEX IF NOT EXISTS idx_assetedges_src ON asset_edges(src_asset_id, rel);
+CREATE INDEX IF NOT EXISTS idx_assetedges_dst ON asset_edges(dst_asset_id, rel);
+
 -- task_constraints: operator-authored operation constraints (allow/deny) for a task.
 -- Extracted by the goals decomposer at round 0 (from goal/description), editable at
 -- runtime by the main agent + the "constraint management" overview. Injected into the planner/worker system
