@@ -275,7 +275,7 @@ BEGIN
 END $$;
 ALTER TABLE exploration_edges DROP CONSTRAINT IF EXISTS ck_edge_rel;
 ALTER TABLE exploration_edges ADD CONSTRAINT ck_edge_rel
-    CHECK (rel IN ('spawns','derived_from','yields','proves','covers','supersedes'));
+    CHECK (rel IN ('spawns','derived_from','yields','proves','covers','supersedes','shares_root_cause'));
 
 CREATE TABLE IF NOT EXISTS exploration_anchors (
     node_id   BIGINT NOT NULL REFERENCES exploration_nodes(id) ON DELETE CASCADE,

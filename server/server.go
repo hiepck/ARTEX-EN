@@ -3340,6 +3340,9 @@ func (s *Server) settingsPayload() map[string]any {
 		// record_fact's evidence-gated "supersedes" parameter + its fact_supersedes
 		// exposure in graph_overview (off by default); read lazily, no agent rebuild on change.
 		"fact_supersedes_enabled": s.m.FactSupersedesEnabled(),
+		// report_finding's optional "shares_root_cause_with" parameter + its clustered
+		// root_cause_clusters exposure in graph_overview (off by default); read lazily, no agent rebuild on change.
+		"root_cause_grouping_enabled": s.m.RootCauseGroupingEnabled(),
 		// The global settings for finding IM notifications. A channel is an independent resource managed through /api/notify/*;
 		// only the three settings that apply to every channel live here.
 		"notify_enabled":             s.m.pg.GetBool(settingNotifyEnabled, true),
@@ -3418,6 +3421,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		ReachabilityEdgesEnabled *bool `json:"reachability_edges_enabled"`
 		// The fact-supersedes switch (off by default); read lazily each round, so it takes effect immediately with no agent rebuild.
 		FactSupersedesEnabled *bool `json:"fact_supersedes_enabled"`
+		// The root-cause-grouping switch (off by default); read lazily each round, so it takes effect immediately with no agent rebuild.
+		RootCauseGroupingEnabled *bool `json:"root_cause_grouping_enabled"`
 		// The global settings for finding IM notifications. All three are read once per round by the delivery engine, so a change takes effect immediately
 		// with no agent rebuild and no restart.
 		NotifyEnabled    *bool   `json:"notify_enabled"`
@@ -3461,6 +3466,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.FactSupersedesEnabled != nil {
 		if err := s.m.SetFactSupersedesEnabled(*req.FactSupersedesEnabled); err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+	}
+	if req.RootCauseGroupingEnabled != nil {
+		if err := s.m.SetRootCauseGroupingEnabled(*req.RootCauseGroupingEnabled); err != nil {
 			writeErr(w, 500, err.Error())
 			return
 		}

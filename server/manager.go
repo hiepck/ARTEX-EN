@@ -289,6 +289,12 @@ const (
 	// its exposure in graph_overview. Off by default; read lazily via a
 	// package-level function variable (agent.FactSupersedesEnabled).
 	settingFactSupersedes = "fact_supersedes_enabled"
+	// report_finding's optional "shares_root_cause_with" parameter (an
+	// exploration_edges row linking a finding to an earlier finding it shares
+	// its root cause with) and its clustered exposure in graph_overview. Off
+	// by default; read lazily via a package-level function variable
+	// (agent.RootCauseGroupingEnabled).
+	settingRootCauseGrouping = "root_cause_grouping_enabled"
 	// defaultWebSearchBackend is used when web search is on but no backend was picked.
 	defaultWebSearchBackend = "ddgs"
 	// deepSeekWebSearchBackend borrows the active LLM profile instead of its own
@@ -554,6 +560,17 @@ func (m *Manager) FactSupersedesEnabled() bool {
 // SetFactSupersedesEnabled persists the fact-supersedes toggle.
 func (m *Manager) SetFactSupersedesEnabled(on bool) error {
 	return m.pg.SetBool(settingFactSupersedes, on)
+}
+
+// RootCauseGroupingEnabled reports whether report_finding's evidence-gated
+// "shares_root_cause_with" parameter is active (off by default; settings.root_cause_grouping_enabled).
+func (m *Manager) RootCauseGroupingEnabled() bool {
+	return m.pg.GetBool(settingRootCauseGrouping, false)
+}
+
+// SetRootCauseGroupingEnabled persists the root-cause-grouping toggle.
+func (m *Manager) SetRootCauseGroupingEnabled(on bool) error {
+	return m.pg.SetBool(settingRootCauseGrouping, on)
 }
 
 // LLMPoolEnabled reports whether LLM failover is on (off by default;
