@@ -410,6 +410,24 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 			factFrom[e.To] = e.From
 		}
 	}
+	// fact_supersedes: a later fact that overturned an earlier one's conclusion.
+	// old_intent_id is looked up from factFrom (built just above), not from the
+	// truncated recent_done_intents window -- the old fact may be long gone from
+	// that window by the time something invalidates it.
+	if factSupersedesEnabled() {
+		sup := make([]map[string]any, 0)
+		for _, e := range edges {
+			if e.Rel != db.RelSupersedes {
+				continue
+			}
+			entry := map[string]any{"new_fact_id": e.From, "old_fact_id": e.To}
+			if oldIntent := factFrom[e.To]; oldIntent > 0 {
+				entry["old_intent_id"] = oldIntent
+			}
+			sup = append(sup, entry)
+		}
+		out["fact_supersedes"] = sup
+	}
 	// cold-digest §6: members folded into an active digest are shown via cold_digests
 	// (below), not the flat recent_* lists. `covered` maps member id → its digest id.
 	// §6 render-time revival check: a covered member that has become hot again (a new
@@ -1375,6 +1393,7 @@ type factItem struct {
 	Confidence string            `json:"confidence"` // observed (seen directly) | inferred (deduced from symptoms)
 	IntentID   json.RawMessage   `json:"intent_id"`
 	AssetIDs   []json.RawMessage `json:"asset_ids"`
+	Supersedes []json.RawMessage `json:"supersedes"`
 }
 
 // recordOneFact writes a fact node and links it to the intent (intent->yields->fact). defaultIntent is
@@ -1382,6 +1401,19 @@ type factItem struct {
 func (t *ToolSet) recordOneFact(it factItem, defaultIntent int64) (int64, error) {
 	if strings.TrimSpace(it.Summary) == "" {
 		return 0, fmt.Errorf("summary must not be empty")
+	}
+	if len(it.Supersedes) > 0 && !factSupersedesEnabled() {
+		return 0, fmt.Errorf("fact supersession is disabled; omit supersedes, or ask an operator to enable fact_supersedes_enabled")
+	}
+	if len(it.Supersedes) > 0 && (strings.TrimSpace(it.Confidence) != "observed" || strings.TrimSpace(it.Evidence) == "") {
+		return 0, fmt.Errorf("supersedes requires confidence=observed and a non-empty evidence on this same fact -- a claim to overturn an earlier conclusion needs real proof, not a guess")
+	}
+	supersedes := pidList(it.Supersedes)
+	for _, oldID := range supersedes {
+		n, err := t.ts.GetNode(oldID)
+		if err != nil || n == nil || n.Kind != db.KindFact {
+			return 0, fmt.Errorf("supersedes id %d does not exist as a fact of this task", oldID)
+		}
 	}
 	payload := map[string]any{"summary": it.Summary}
 	if it.Detail != "" {
@@ -1411,6 +1443,9 @@ func (t *ToolSet) recordOneFact(it factItem, defaultIntent int64) (int64, error)
 	if intent > 0 {
 		_ = t.ts.Link(intent, db.RelYields, id) // chain: intent -> fact
 	}
+	for _, oldID := range supersedes {
+		_ = t.ts.Link(id, db.RelSupersedes, oldID) // best-effort: the fact itself is already recorded and must not be undone by an edge-write hiccup
+	}
 	t.writes.Facts++
 	return id, nil
 }
@@ -1431,6 +1466,7 @@ func (t *ToolSet) recordFact() actool.CoreTool {
 			"evidence":   str("[one line] of key evidence: the command + the one or two output lines that prove the conclusion best. Keep it short and do not paste a large block of output (specifics go in detail)."),
 			"confidence": str("observed (seen directly in the output) | inferred (deduced from symptoms). Label a negative conclusion honestly."),
 			"asset_ids":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "the related asset ids (optional, 0/1/many): which assets this fact concerns"},
+			"supersedes": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "optional: ids of earlier facts this new fact invalidates or overturns (e.g. \"fact #1948 said this endpoint has an authz gate; this fact shows the 403 was actually a wrong-credential-type artifact\"). Requires confidence=observed and a non-empty evidence on this same fact -- overturning a settled conclusion needs real proof, not a guess."},
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
