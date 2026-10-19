@@ -38,7 +38,7 @@ func builtinToolsByAgent() map[string][]actool.CoreTool {
 	return map[string][]actool.CoreTool{
 		"mainagent": ts.MainAgentTools(),
 		"planner":   ts.PlannerTools(),
-		"worker":    ts.WorkerTools(),
+		"worker":    append(ts.WorkerTools(), httpRequestTool(nil)),
 		// goals (the goal decomposer) is bound to set_goals + set_constraints by default: they are what
 		// write the decomposed goals and extracted operating constraints into the database. It shares the same managed tools as mainagent, whose description/schema can be edited in the web UI and ticked per agent.
 		"goals": {ts.setGoals(), ts.setConstraints()},
@@ -58,7 +58,7 @@ func builtinToolsByAgent() map[string][]actool.CoreTool {
 //
 // goal_met: it bypasses proving goals one by one and declares [the whole task complete] globally, which
 // carries a lot of weight and a risk of misjudgement, and it duplicates "prove_goal marking the last goal -> automatic wrap-up", so no agent gets it by default and it is bound by hand when needed.
-var defaultUnbound = map[string]bool{"goal_met": true}
+var defaultUnbound = map[string]bool{"goal_met": true, "http_request": true}
 
 // BuiltinToolSeeds deduplicates and merges each agent's builtin tool set into a seed list: a tool with
 // the same name (such as list_assets, which several agents have) becomes one entry whose Agents is the union; a tool in defaultUnbound is forced to an empty binding.
