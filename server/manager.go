@@ -280,6 +280,10 @@ const (
 	// via a package-level function variable (agent.BurnSignalEnabled), so toggling
 	// it takes effect on the next round without a rebuild.
 	settingBurnSignalEnabled = "burn_signal_enabled"
+	// report_finding's optional "reaches" parameter (an evidence-gated asset_edges
+	// row) and its exposure in graph_overview. Off by default; read lazily via a
+	// package-level function variable (agent.ReachabilityEdgesEnabled).
+	settingReachabilityEdges = "reachability_edges_enabled"
 	// defaultWebSearchBackend is used when web search is on but no backend was picked.
 	defaultWebSearchBackend = "ddgs"
 	// deepSeekWebSearchBackend borrows the active LLM profile instead of its own
@@ -519,6 +523,17 @@ func (m *Manager) BurnSignalEnabled() bool {
 // SetBurnSignalEnabled persists the burn-signal toggle.
 func (m *Manager) SetBurnSignalEnabled(on bool) error {
 	return m.pg.SetBool(settingBurnSignalEnabled, on)
+}
+
+// ReachabilityEdgesEnabled reports whether report_finding's evidence-gated
+// "reaches" parameter is active (off by default; settings.reachability_edges_enabled).
+func (m *Manager) ReachabilityEdgesEnabled() bool {
+	return m.pg.GetBool(settingReachabilityEdges, false)
+}
+
+// SetReachabilityEdgesEnabled persists the reachability-edges toggle.
+func (m *Manager) SetReachabilityEdgesEnabled(on bool) error {
+	return m.pg.SetBool(settingReachabilityEdges, on)
 }
 
 // LLMPoolEnabled reports whether LLM failover is on (off by default;
