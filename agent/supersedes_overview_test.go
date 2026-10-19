@@ -27,11 +27,23 @@ func TestGraphOverviewExposesFactSupersedesWithOldIntentID(t *testing.T) {
 	if err := store.Link(intentID, db.RelYields, oldFactID); err != nil {
 		t.Fatal(err)
 	}
-	// Simulate the intent having long since finished and scrolled out of any
-	// recent-window list -- the overview must still resolve old_intent_id
-	// correctly, since it is computed from factFrom, not from recent_done_intents.
 	if err := store.SetIntentState(intentID, "done"); err != nil {
 		t.Fatal(err)
+	}
+	// Push intentID out of graph_overview's recent_done_intents window
+	// (recentDoneCap=12, agent/tools.go, ordered by id descending): add 13
+	// newer done intents after it. Without this, the test would pass even
+	// against a buggy implementation that resolved old_intent_id by searching
+	// recent_done_intents instead of factFrom -- the exact defect the
+	// builder-check review caught in this feature's design.
+	for i := 0; i < 13; i++ {
+		fillerID, err := store.AddIntent(map[string]any{"summary": "filler intent"}, 5, nil, "planner")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.SetIntentState(fillerID, "done"); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	tools := NewToolSet(store, "planner")
@@ -59,6 +71,17 @@ func TestGraphOverviewExposesFactSupersedesWithOldIntentID(t *testing.T) {
 	}
 
 	on := tools.graphOverviewData()
+
+	// Self-verifying: confirm intentID is genuinely outside the window this
+	// test means to overflow -- if this ever fails, the assertion below proves
+	// nothing about factFrom-vs-window resolution and the filler count must grow.
+	recentDone, _ := on["recent_done_intents"].([]map[string]any)
+	for _, ri := range recentDone {
+		if ri["id"] == intentID {
+			t.Fatalf("intentID %d is still inside recent_done_intents (len=%d) -- increase the filler count so this test actually overflows the window", intentID, len(recentDone))
+		}
+	}
+
 	sup, ok := on["fact_supersedes"].([]map[string]any)
 	if !ok || len(sup) != 1 {
 		t.Fatalf("fact_supersedes = %#v, want exactly 1 entry", on["fact_supersedes"])
