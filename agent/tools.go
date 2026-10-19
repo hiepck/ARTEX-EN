@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -484,7 +483,6 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 		sug := make([]map[string]any, 0)
 		if dir := skillCatalogDir(); dir != "" {
 			if reg, err := skill.LoadDir(dir); err == nil && reg != nil {
-				invoked, _ := t.ts.InvokedSkills() // best-effort: a lookup error just means nothing gets suppressed this round
 				goalTokens := map[string]bool{}
 				if _, goalText, err := t.ts.Root(); err == nil {
 					addTokens(goalTokens, goalText)
@@ -497,38 +495,8 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 						addTokens(goalTokens, vc)
 					}
 				}
-				type scoredSkill struct {
-					name    string
-					score   int
-					matched []string
-				}
-				var candidates []scoredSkill
-				for _, sk := range reg.List() {
-					name := filepath.Base(sk.Dir)
-					if invoked[name] {
-						continue
-					}
-					skillTokens := map[string]bool{}
-					addTokens(skillTokens, strings.ReplaceAll(name, "-", " "))
-					addTokens(skillTokens, sk.Description)
-					var matched []string
-					for tok := range goalTokens {
-						if skillTokens[tok] {
-							matched = append(matched, tok)
-						}
-					}
-					if len(matched) >= minSkillMatchTokens {
-						sort.Strings(matched)
-						candidates = append(candidates, scoredSkill{name, len(matched), matched})
-					}
-				}
-				sort.Slice(candidates, func(i, j int) bool { return candidates[i].score > candidates[j].score })
-				if len(candidates) > maxSkillSuggestions {
-					candidates = candidates[:maxSkillSuggestions]
-				}
-				for _, c := range candidates {
-					sug = append(sug, map[string]any{"skill": c.name, "matched_terms": c.matched})
-				}
+				invoked, invokedErr := t.ts.InvokedSkills()
+				sug = matchUnusedSkills(goalTokens, reg.List(), invoked, invokedErr, minSkillMatchTokens, maxSkillSuggestions)
 			}
 		}
 		out["unused_relevant_skills"] = sug

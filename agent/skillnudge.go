@@ -1,8 +1,12 @@
 package agent
 
 import (
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+
+	"github.com/Autumn-27/norma/skill"
 )
 
 // SkillRelevanceNudgeEnabled reports whether graph_overview's
@@ -38,4 +42,50 @@ func addTokens(set map[string]bool, text string) {
 			set[tok] = true
 		}
 	}
+}
+
+// matchUnusedSkills scores every skill's name+description against goalTokens
+// and returns the top matches not already in invoked, as {skill, matched_terms}
+// entries. If invokedErr is non-nil, the invoked set could not be verified --
+// this degrades to an empty result (never shows everything as unused just
+// because the ledger lookup itself failed), the same degrade shape as a
+// skill.LoadDir failure in the caller.
+func matchUnusedSkills(goalTokens map[string]bool, skills []skill.Skill, invoked map[string]bool, invokedErr error, minMatchTokens, maxSuggestions int) []map[string]any {
+	sug := make([]map[string]any, 0)
+	if invokedErr != nil {
+		return sug
+	}
+	type scoredSkill struct {
+		name    string
+		score   int
+		matched []string
+	}
+	var candidates []scoredSkill
+	for _, sk := range skills {
+		name := filepath.Base(sk.Dir)
+		if invoked[name] {
+			continue
+		}
+		skillTokens := map[string]bool{}
+		addTokens(skillTokens, strings.ReplaceAll(name, "-", " "))
+		addTokens(skillTokens, sk.Description)
+		var matched []string
+		for tok := range goalTokens {
+			if skillTokens[tok] {
+				matched = append(matched, tok)
+			}
+		}
+		if len(matched) >= minMatchTokens {
+			sort.Strings(matched)
+			candidates = append(candidates, scoredSkill{name, len(matched), matched})
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].score > candidates[j].score })
+	if len(candidates) > maxSuggestions {
+		candidates = candidates[:maxSuggestions]
+	}
+	for _, c := range candidates {
+		sug = append(sug, map[string]any{"skill": c.name, "matched_terms": c.matched})
+	}
+	return sug
 }
