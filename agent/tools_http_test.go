@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	actool "github.com/Autumn-27/norma/tool"
 )
@@ -26,20 +27,27 @@ func callHTTPTool(t *testing.T, tool actool.CoreTool, body string) map[string]an
 	return out
 }
 
+// TestHTTPRequestToolSessionPersistsCookiesAndResets proves cookie persistence
+// AND that reset_cookies actually clears the jar, by using a distinct,
+// traceable cookie value per session rather than one constant value: a server
+// that always sets the same value (or always answers "has a cookie") cannot
+// tell a cleared jar from a full one, since the value looks identical either
+// way. Here, each time the server sees no incoming cookie it mints a NEW
+// unique value and reports "nocookie"; when it does see one, it echoes the
+// exact value back. A broken (no-op) reset would make call 3 echo session 1's
+// value instead of reporting "nocookie", and call 4 would then echo session
+// 1's value instead of session 2's — both are checked explicitly below.
 func TestHTTPRequestToolSessionPersistsCookiesAndResets(t *testing.T) {
-	var hits int
+	var sessions int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
-		if hits == 1 || hits == 3 {
-			http.SetCookie(w, &http.Cookie{Name: "session", Value: "abc123"})
-			io.WriteString(w, fmt.Sprintf("set-%d", hits))
+		if c, err := r.Cookie("session"); err == nil {
+			io.WriteString(w, "cookie="+c.Value)
 			return
 		}
-		if c, err := r.Cookie("session"); err == nil && c.Value == "abc123" {
-			io.WriteString(w, fmt.Sprintf("with-cookie-%d", hits))
-			return
-		}
-		io.WriteString(w, fmt.Sprintf("no-cookie-%d", hits))
+		sessions++
+		value := fmt.Sprintf("session-%d", sessions)
+		http.SetCookie(w, &http.Cookie{Name: "session", Value: value})
+		io.WriteString(w, "nocookie")
 	}))
 	defer srv.Close()
 
@@ -47,20 +55,36 @@ func TestHTTPRequestToolSessionPersistsCookiesAndResets(t *testing.T) {
 	tool := httpRequestTool(client)
 
 	first := callHTTPTool(t, tool, fmt.Sprintf(`{"url":%q}`, srv.URL))
-	if !strings.Contains(fmt.Sprint(first["body"]), "set-1") {
-		t.Fatalf("call 1 body = %v", first["body"])
+	if fmt.Sprint(first["body"]) != "nocookie" {
+		t.Fatalf("call 1 (fresh client, no cookie yet) body = %v, want nocookie", first["body"])
 	}
 	second := callHTTPTool(t, tool, fmt.Sprintf(`{"url":%q}`, srv.URL))
-	if !strings.Contains(fmt.Sprint(second["body"]), "with-cookie-2") {
-		t.Fatalf("call 2 did not carry the session cookie: %v", second["body"])
+	if fmt.Sprint(second["body"]) != "cookie=session-1" {
+		t.Fatalf("call 2 did not carry session-1's cookie: %v", second["body"])
 	}
 	third := callHTTPTool(t, tool, fmt.Sprintf(`{"url":%q,"reset_cookies":true}`, srv.URL))
-	if !strings.Contains(fmt.Sprint(third["body"]), "set-3") {
-		t.Fatalf("call 3 (after reset_cookies) should look like a fresh session: %v", third["body"])
+	if fmt.Sprint(third["body"]) != "nocookie" {
+		t.Fatalf("call 3 (after reset_cookies) should carry no cookie, got: %v", third["body"])
 	}
 	fourth := callHTTPTool(t, tool, fmt.Sprintf(`{"url":%q}`, srv.URL))
-	if !strings.Contains(fmt.Sprint(fourth["body"]), "with-cookie-4") {
-		t.Fatalf("call 4 should carry the cookie set by call 3: %v", fourth["body"])
+	if fmt.Sprint(fourth["body"]) != "cookie=session-2" {
+		t.Fatalf("call 4 should carry session-2's (post-reset) cookie, not session-1's: %v", fourth["body"])
+	}
+}
+
+// TestBuildHTTPToolClientHasBoundedTimeout mirrors server/customtool.go's
+// runHTTPTool, which bounds every request with both a context timeout AND
+// client.Timeout: 30s. Without a client-level timeout, a hung target would
+// block indefinitely, and because http_request is not concurrency-safe
+// (IsConcurrencySafe defaults false), that stalls the worker's whole tool
+// queue, not just this one call.
+func TestBuildHTTPToolClientHasBoundedTimeout(t *testing.T) {
+	client := buildHTTPToolClient("", "")
+	if client.Timeout <= 0 {
+		t.Fatalf("buildHTTPToolClient's client.Timeout = %v, want a bounded positive timeout", client.Timeout)
+	}
+	if client.Timeout != 30*time.Second {
+		t.Fatalf("client.Timeout = %v, want 30s (matching server/customtool.go's runHTTPTool default)", client.Timeout)
 	}
 }
 

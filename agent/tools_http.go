@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/Autumn-27/norma/permission"
 	actool "github.com/Autumn-27/norma/tool"
@@ -25,7 +26,10 @@ import (
 // tool's traffic stays part of the evidence trail exactly like WebFetch/Bash's.
 func buildHTTPToolClient(proxyAddr, proxyCACert string) *http.Client {
 	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
+	// 30s matches server/customtool.go's runHTTPTool default -- http_request is
+	// not concurrency-safe, so a hung target would otherwise stall the worker's
+	// whole tool queue, not just this one call.
+	client := &http.Client{Jar: jar, Timeout: 30 * time.Second}
 	if proxyAddr == "" {
 		return client
 	}
@@ -63,6 +67,10 @@ func httpRequestTool(client *http.Client) actool.CoreTool {
 			"body":          str("optional request body."),
 			"reset_cookies": map[string]any{"type": "boolean", "description": "optional: clear this session's cookie jar before sending (start a fresh session)."},
 		}, "url"),
+		// Concurrent is deliberately left unset: Run mutates client.Jar on
+		// reset_cookies, so this tool must stay non-concurrency-safe (the SDK's
+		// fail-closed default) -- setting Concurrent here would let two calls
+		// race on the same *http.Client.
 		ReadOnly: func(in json.RawMessage) bool {
 			var a struct {
 				Method string `json:"method"`
