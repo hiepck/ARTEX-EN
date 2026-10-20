@@ -39,6 +39,20 @@ func TestGetReportIncludesClustersAndReachability(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	srcID, err := m.Assets().UpsertRootDomain(db.UpsertRootDomainReq{Domain: "report-chain-src.invalid"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Assets().DeleteByIDs([]int64{srcID})
+	dstID, err := m.Assets().UpsertRootDomain(db.UpsertRootDomainReq{Domain: "report-chain-dst.invalid"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Assets().DeleteByIDs([]int64{dstID})
+	if err := store.AddAssetEdge(srcID, db.AssetRelCanReach, dstID); err != nil {
+		t.Fatal(err)
+	}
+
 	token, err := signJWT(s.jwtKey)
 	if err != nil {
 		t.Fatal(err)
@@ -56,5 +70,11 @@ func TestGetReportIncludesClustersAndReachability(t *testing.T) {
 	}
 	if !strings.Contains(md, "Shares root cause with") {
 		t.Fatalf("report is missing the per-finding cross-reference:\n%s", md)
+	}
+	if !strings.Contains(md, "## Asset Reachability") {
+		t.Fatalf("report is missing the Asset Reachability section:\n%s", md)
+	}
+	if !strings.Contains(md, "`report-chain-src.invalid` can reach `report-chain-dst.invalid`") {
+		t.Fatalf("report does not render the resolved reachability edge with real asset labels:\n%s", md)
 	}
 }
