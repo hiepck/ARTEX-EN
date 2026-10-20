@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -432,43 +431,12 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 	}
 	// root_cause_clusters: connected groups of confirmed findings a worker has
 	// explicitly linked as tracing back to the same underlying flaw. Built via
-	// union-find over shares_root_cause edges so a transitive chain of links
-	// (A->B, B->C) reads as one 3-member cluster, not two disconnected pairs.
+	// db.ClusterByRel (union-find over shares_root_cause edges) so a transitive
+	// chain of links (A->B, B->C) reads as one 3-member cluster, not two
+	// disconnected pairs.
 	if rootCauseGroupingEnabled() {
-		parent := map[int64]int64{}
-		var find func(int64) int64
-		find = func(x int64) int64 {
-			if _, ok := parent[x]; !ok {
-				parent[x] = x
-			}
-			if parent[x] != x {
-				parent[x] = find(parent[x])
-			}
-			return parent[x]
-		}
-		union := func(a, b int64) {
-			ra, rb := find(a), find(b)
-			if ra != rb {
-				parent[ra] = rb
-			}
-		}
-		for _, e := range edges {
-			if e.Rel != db.RelSharesRootCause {
-				continue
-			}
-			union(e.From, e.To)
-		}
-		groups := map[int64][]int64{}
-		for id := range parent {
-			root := find(id)
-			groups[root] = append(groups[root], id)
-		}
 		clusters := make([]map[string]any, 0)
-		for _, members := range groups {
-			if len(members) < 2 {
-				continue // a lone node with no partner isn't a cluster
-			}
-			sort.Slice(members, func(i, j int) bool { return members[i] < members[j] })
+		for _, members := range db.ClusterByRel(edges, db.RelSharesRootCause) {
 			clusters = append(clusters, map[string]any{"finding_ids": members})
 		}
 		out["root_cause_clusters"] = clusters
