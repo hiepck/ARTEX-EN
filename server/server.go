@@ -3928,9 +3928,31 @@ func (s *Server) getReport(w http.ResponseWriter, r *http.Request) {
 			counts[ty] = len(ns)
 		}
 	}
+
+	edges, _ := t.Store.Edges(5000) // best-effort: a query error degrades to no clusters, never blocks report generation
+	clusters := db.ClusterByRel(edges, db.RelSharesRootCause)
+
+	var reach []report.ReachabilityEdge
+	if assetEdges, err := t.Store.AssetEdges(0); err == nil && len(assetEdges) > 0 {
+		var ids []int64
+		for _, e := range assetEdges {
+			ids = append(ids, e.SrcAssetID, e.DstAssetID)
+		}
+		byID := s.resolveAssetIDs(ids)
+		for _, e := range assetEdges {
+			src, srcOK := byID[e.SrcAssetID]
+			dst, dstOK := byID[e.DstAssetID]
+			if !srcOK || !dstOK {
+				continue // an asset was deleted after the edge was recorded -- skip, don't crash
+			}
+			reach = append(reach, report.ReachabilityEdge{SrcLabel: assetLabel(src), DstLabel: assetLabel(dst)})
+		}
+	}
+
 	md := report.Markdown(report.Input{
 		Title: t.Description, Goal: t.Goal, GeneratedAt: time.Now(),
 		AssetCounts: counts, Findings: findings,
+		Clusters: clusters, Reachability: reach,
 	})
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.WriteHeader(200)
