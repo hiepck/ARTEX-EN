@@ -16,8 +16,12 @@ SKILLS='["chain-hunting","chain-toolkit","validation-gate"]'
 # Hunting skills deepen the worker's per-class bug finding (spec goal #1).
 WORKER_SKILLS='["hunting-methodology","hunt-idor","hunt-oauth","hunt-xss","hunt-rce","hunt-business-logic","hunt-info-disclosure","validation-gate"]'
 # Read/correlate/plan tools for the chainer — plus report_finding for the composite only.
+# record_fact is NOT included: it requires a task-bound exploration store (agent/tools.go's
+# needExploration guard) and always fails with "not running inside a task" for a cross-task
+# triggered agent like this one; add_task_hint (which takes task_id explicitly) is the
+# correct way for the chainer to write back into a task's graph.
 TOOLS=(list_findings list_task_findings get_task_node_detail get_task_graph \
-       list_task_worker_traces get_task_worker_trace add_task_hint record_fact Bash report_finding)
+       list_task_worker_traces get_task_worker_trace add_task_hint Bash report_finding)
 
 command -v curl >/dev/null || { echo "curl not found" >&2; exit 2; }
 command -v jq   >/dev/null || { echo "jq not found" >&2; exit 2; }

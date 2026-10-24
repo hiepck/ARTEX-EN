@@ -54,7 +54,10 @@ If you prefer the UI over the seed script:
 3. **Bind skills** (agent visibility): `chain-hunting`, `chain-toolkit`, `validation-gate`.
 4. **Bind tools** to the agent: `list_findings`, `list_task_findings`, `get_task_node_detail`,
    `get_task_graph`, `list_task_worker_traces`, `get_task_worker_trace`, `add_task_hint`,
-   `record_fact`, `Bash`, and `report_finding` (the last for the composite only).
+   `Bash`, and `report_finding` (the last for the composite only). Do **not** bind
+   `record_fact`: it requires a task-bound exploration store and always errors with
+   "not running inside a task" for a cross-task triggered agent — `add_task_hint` (which
+   takes `task_id` explicitly) is the correct way for the chainer to write into a task's graph.
 5. **Add a trigger**: condition `on_finding`, enabled, with a finding message telling the
    agent to correlate the new finding and plant a chain-pursuit hint for in-scope hops.
 
@@ -104,10 +107,20 @@ Automated checks (run on 2026-10-11, all green):
   idempotency against a recording stub).
 - Lint sweep over all 43 pack markdown files — clean.
 
-**Acceptance gate (operator-run, pending):** the end-to-end sample chain requires a
-running ARTEX plus a self-hosted lab (no ARTEX chain-eval harness exists). Scenario
-`SSRF → cloud metadata → credential → privileged action`: start ARTEX, run the seed
-script, launch a task against the lab, and confirm — the worker reports the SSRF leg; the
-`chainer` fires on `on_finding` and plants a chain-pursuit hint; the planner dispatches the
-next hop; a composite `findings` row (`vulnclass="chain"`) is stored with the structure in
-"Storage model" above. Record the outcome here when run.
+**Acceptance gate — run on 2026-10-24 against a live authorized engagement (task #597,
+real target, not a self-hosted lab):** the pack was activated with the seed script's exact
+API sequence, then observed live. A worker-reported SSRF finding (unauthenticated
+Collabora `upload-settings` request-injection reaching an internal admin host) fired the
+`on_finding` trigger; `chainer` correlated it, independently researched both candidate
+next hops against the real open-source code of the reached services, and planted two
+`add_task_hint` hints: (1) a precise, evidence-gated next-hop probe for a genuine
+debug-mode local-file-read primitive it located in the reachable service's source, with an
+explicit two-independent-reads evidence bar before escalating further, and (2) an explicit
+"chain BLOCKED, do not report a theoretical chain" instruction for the other candidate hop
+once it determined the hop was not actually reachable — i.e. the pack suppressed a
+would-be false-positive chain rather than reporting it. It did not register a composite
+finding, correctly, since no hop had yet reached a proven terminal impact (the
+min-across-hops evidence gate held). One defect found and fixed during this run:
+`record_fact` was bound to the chainer per this doc's earlier tool list but can never
+succeed for a cross-task triggered agent (see "Manual UI equivalent" above) — removed from
+both the seed script and this doc. No other defects observed.
