@@ -41,6 +41,7 @@ func jsonResult(v any) (actool.Result, error) {
 func (s *Server) hostTools() ([]actool.CoreTool, map[string][]string) {
 	tools := append(s.m.HostTools(), s.orchestrationTools()...)
 	tools = append(tools, s.findingRetestTools()...)
+	tools = append(tools, s.taskSubmissionReviewTools()...)
 	tools = append(tools, s.platformTools()...) // platform operation tools (creating/editing skills/tools/MCP, for Auto)
 	custom, err := s.customTools()
 	if err != nil {
