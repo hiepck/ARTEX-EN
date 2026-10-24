@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -90,8 +91,50 @@ func coordinateWithSchemaMigration(tx *sql.Tx) error {
 // DSN resolves the PostgreSQL connection string and reports where it came from.
 // Precedence: env ARTEX_PG_DSN > config file (config.json). There is no
 // built-in default — it errors if neither source is configured.
+//
+// Under `go test` the resolved DSN is redirected to a sibling "<name>_test"
+// database (created on demand by Open via ensureDatabase) so the test suites
+// can never write findings or tasks into a real deployment's database. Set
+// ARTEX_ALLOW_PROD_DB_IN_TESTS=1 to opt out and run against the configured
+// database itself (the pre-existing behaviour, kept for the dev-DB workflow).
 func DSN() (dsn, source string, err error) {
-	return config.PostgresDSN()
+	dsn, source, err = config.PostgresDSN()
+	if err != nil || !isTestRun() {
+		return dsn, source, err
+	}
+	if os.Getenv("ARTEX_ALLOW_PROD_DB_IN_TESTS") == "1" {
+		return dsn, source + " (tests allowed on the configured database)", err
+	}
+	redir, rerr := testDatabaseDSN(dsn)
+	if rerr != nil {
+		return dsn, source, err
+	}
+	return redir, source + " (redirected to the _test database)", nil
+}
+
+// isTestRun reports whether this process is a go test binary: the testing
+// package sets -test.* flags on its own command line.
+func isTestRun() bool {
+	for _, a := range os.Args[1:] {
+		if strings.HasPrefix(a, "-test.") {
+			return true
+		}
+	}
+	return false
+}
+
+// testDatabaseDSN rewrites a postgres:// URL to point at "<name>_test".
+func testDatabaseDSN(dsn string) (string, error) {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return "", err
+	}
+	name := strings.TrimPrefix(u.Path, "/")
+	if name == "" {
+		return "", fmt.Errorf("dsn has no database name to redirect")
+	}
+	u.Path = "/" + name + "_test"
+	return u.String(), nil
 }
 
 // DB wraps the shared *sql.DB. PG handles its own connection pool + concurrency
