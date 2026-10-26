@@ -655,6 +655,9 @@ func (t *ToolSet) WorkerTools() []actool.CoreTool {
 		t.searchAllWorkerTraces(), t.getWorkerTrace(),
 		// node_detail: once the worker has an intent_id/node id it can look up that node's full details (together with the look-back above).
 		t.nodeDetail(),
+		// search_global_knowledge: cross-task pattern memory — reuse what other hunts
+		// already learned about the same stack/technique before spending calls on it.
+		t.searchGlobalKnowledge(),
 		// The tools below are still [not given] to the worker and are reserved for planner/main (reading context
 		// and reviewing across work is a planning job, while the worker only executes and writes back one intent): list_facts / list_companies / list_worker_traces.
 	}

@@ -221,8 +221,11 @@ func (t *ToolSet) ListFindingsTool() actool.CoreTool       { return t.listFindin
 func (t *ToolSet) GetWorkerTraceTool() actool.CoreTool     { return t.getWorkerTrace() }
 func (t *ToolSet) ListWorkerTracesTool() actool.CoreTool   { return t.listWorkerTraces() }
 func (t *ToolSet) SearchWorkerTracesTool() actool.CoreTool { return t.searchAllWorkerTraces() }
-func (t *ToolSet) NodeDetailTool() actool.CoreTool         { return t.nodeDetail() }
-func (t *ToolSet) AddHintTool() actool.CoreTool            { return t.addHint() }
+func (t *ToolSet) SearchGlobalKnowledgeTool() actool.CoreTool {
+	return t.searchGlobalKnowledge()
+}
+func (t *ToolSet) NodeDetailTool() actool.CoreTool { return t.nodeDetail() }
+func (t *ToolSet) AddHintTool() actool.CoreTool    { return t.addHint() }
 
 // SetEnrich wires the async enrichment engine (DNS/HTTP auto-completion).
 func (t *ToolSet) SetEnrich(e EnrichTrigger) { t.enrich = e }
@@ -538,6 +541,21 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 	factNodes, _ := t.ts.ListByKind(db.KindFact, 1000) // newest first
 	out["findings_total"] = len(vulnNodes)             // the total number of confirmed findings (goal judgement looks at this); the details are in finding_list (the latest window)
 	out["facts"] = len(factNodes)                      // the number of exploration facts/conclusions (including negative ones)
+	// findings_by_vulnclass: which vulnerability classes this task has already
+	// confirmed. Paired with coverage.by_type (per-asset-type untested counts) it
+	// gives the planner a compact coverage matrix — "where have we not looked"
+	// (asset types) × "what have we already proven" (classes) — without dumping the
+	// full finding list into every round. A class present here has a working PoC;
+	// a class absent is not proof it was tried (see recent_facts/recent_done).
+	byClass := map[string]int{}
+	for _, n := range vulnNodes {
+		var fp map[string]any
+		_ = json.Unmarshal(n.Payload, &fp)
+		if vc, _ := fp["vulnclass"].(string); strings.TrimSpace(vc) != "" {
+			byClass[strings.TrimSpace(vc)]++
+		}
+	}
+	out["findings_by_vulnclass"] = byClass
 	// findings are the highest-value product of a task -> the overview carries the latest window (<=10;
 	// vulnNodes is already ordered by id descending, i.e. newest first), so the planner sees the most
 	// recently confirmed findings at a glance when judging the goal each round; use list_findings for all or older ones.
@@ -626,7 +644,17 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 				if cov, err := t.as.TaskCoverageWithSources(t.taskID); err == nil {
 					m["denominator"] = cov.Denominator
 					m["tested"] = cov.Tested
-					m["by_type"] = cov.ByType
+					// by_type carries untested explicitly: the planner should not have to
+					// subtract two numbers every round to see which asset types are still
+					// untouched (that subtraction is where "I thought we covered it" comes from).
+					byType := make([]map[string]any, 0, len(cov.ByType))
+					for _, e := range cov.ByType {
+						byType = append(byType, map[string]any{
+							"type": e.Type, "total": e.Total, "tested": e.Tested,
+							"untested": max(e.Total-e.Tested, 0),
+						})
+					}
+					m["by_type"] = byType
 					m["note"] = "coverage is the asset test coverage (including endpoints and other related assets), a rough estimate for reference only: it covers the scope and fact anchors of the current task and directly linked tasks, and a linked scope is read-only. Container-type assets and large enumerations drag it down, so do not conclude from it that testing is complete; use add_task_scope to extend this task's scope and list_untested_assets to see untested assets [usually you do not call list_untested_assets, just carry on with the task];"
 					if cov.Denominator == 0 {
 						m["pct"] = nil
@@ -1148,6 +1176,16 @@ func (t *ToolSet) addOneIntent(it intentItem) (int64, error) {
 		priority = 5
 	}
 	anchors := pidList(it.AssetIDs)
+	// Live-direction dedup at admission (agent/intent_dedup.go): refuse to put a
+	// second worker on a direction that is already open/running/paused. The planner
+	// prompt is advisory only; this guard is deterministic. Finished intents are
+	// deliberately not compared — re-running a direction after new evidence is a
+	// legitimate move that must stay possible.
+	if live, err := t.ts.ListByKind(db.KindIntent, 500); err == nil {
+		if dup, ratio := liveIntentDuplicate(live, it.Summary); dup != nil {
+			return 0, intentDuplicateError(dup, ratio)
+		}
+	}
 	// Asset interception: when an asset bound to the intent matches a system asset interception rule, the intent must not be dispatched.
 	if t.as != nil && len(anchors) > 0 {
 		hits, err := t.as.CheckAssetsIntercept(t.taskID, anchors)
@@ -2134,6 +2172,50 @@ func (t *ToolSet) searchAllWorkerTraces() actool.CoreTool {
 		})
 }
 
+// searchGlobalKnowledge is the cross-task pattern-memory read: it searches confirmed
+// facts/findings from EVERY task, not just this one. The in-task look-back tools
+// (list_facts / search_all_worker_traces) only see this task plus directly linked
+// ones, so knowledge learned by an unrelated hunt on the same stack/target class was
+// invisible and had to be re-discovered. Hits are hints, not authority: the caller
+// must verify them against the current target.
+func (t *ToolSet) searchGlobalKnowledge() actool.CoreTool {
+	return t.readExpTool("search_global_knowledge",
+		"Search confirmed facts and findings from [other tasks] (cross-task pattern memory) by keyword: a bypass that worked, a dead end, an environment quirk, a target's stack behaviour. Use it before starting a direction that looks generic or familiar (default credentials, SSRF sinks, gateway quirks, WAF behaviour) so another hunt's lesson is reused instead of re-discovered. Hits carry task_id/node_id; they are hints only — verify them against the current target. This does not replace this task's own list_facts/findings.",
+		obj(map[string]any{
+			"q":     str("the search keyword(s), e.g. a hostname, an endpoint path, a technique name (\"dash\", \"httpbin redirect\", \"default credential\")"),
+			"limit": intp("the result cap, default 20, maximum 50 (optional)"),
+		}, "q"),
+		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
+			var a struct {
+				Q     string `json:"q"`
+				Limit int    `json:"limit"`
+			}
+			_ = json.Unmarshal(in, &a)
+			if strings.TrimSpace(a.Q) == "" {
+				return actool.Errorf("q is required"), nil
+			}
+			hits, err := t.ts.SearchGlobalKnowledge(a.Q, a.Limit)
+			if err != nil {
+				return actool.Errorf(err.Error()), nil
+			}
+			out := make([]map[string]any, 0, len(hits))
+			for _, h := range hits {
+				m := map[string]any{
+					"task_id": h.TaskID, "node_id": h.NodeID, "kind": h.Kind,
+					"summary": firstLine(h.Summary, 240), "updated_at": h.UpdatedAt,
+				}
+				if h.Severity != "" {
+					m["severity"] = h.Severity
+				}
+				if h.VulnClass != "" {
+					m["vulnclass"] = h.VulnClass
+				}
+				out = append(out, m)
+			}
+			return jsonResult(map[string]any{"query": a.Q, "hits": out})
+		})
+}
+
 // listWorkerTraces gives a worker (which has no graph_overview and can't see the
 // intent graph) a lightweight index of the works in this task — intent_id +
 // one-line summary + state — so it can DISCOVER which works to inspect via
@@ -2200,6 +2282,10 @@ func (t *ToolSet) PlannerTools() []actool.CoreTool {
 		// cold-digest §6.1: restore folded cold nodes (digest body → members → detail).
 		t.expandDigest(),
 		t.getWorkerOutput(), t.getWorkerTrace(), t.searchAllWorkerTraces(), t.listGoals(), t.addIntent(), t.proveGoal(), t.goalMet(),
+		// search_global_knowledge: cross-task pattern memory — what other hunts already
+		// learned about a technique/stack, so the planner can seed directions instead of
+		// re-discovering them (the per-task look-back tools cannot see unrelated tasks).
+		t.searchGlobalKnowledge(),
 		t.killWorkTool(), t.steerWorkTool(),
 		// report_finding: while assessing the state during planning, a finding already confirmed by the planner itself can be registered directly (the same tool as the worker's).
 		t.addFinding(),
