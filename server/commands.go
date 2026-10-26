@@ -101,7 +101,7 @@ func (s *Server) pgTokenByModel(w http.ResponseWriter, r *http.Request) {
 func (s *Server) pgUsageStats(w http.ResponseWriter, r *http.Request) {
 	pg := s.m.PG()
 	if pg == nil {
-		writeJSON(w, 200, map[string]any{"by_profile": []db.ProfileUsage{}, "daily": []db.ProfileDayUsage{}})
+		writeJSON(w, 200, map[string]any{"by_profile": []db.ProfileUsage{}, "daily": []db.ProfileDayUsage{}, "recent": []db.ProfileRecentUsage{}})
 		return
 	}
 	days := atoiDefault(r.URL.Query().Get("days"), 365)
@@ -115,7 +115,16 @@ func (s *Server) pgUsageStats(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"by_profile": byProfile, "daily": daily})
+	// recent = the burn-rate view (1h/24h/7d tokens + 24h errors per profile). It is
+	// deliberately part of this endpoint: the same page that shows all-time spend can
+	// now show which profile is being burned down right now, which is what tells an
+	// operator to switch before a weekly plan runs dry mid-hunt.
+	recent, err := pg.UsageRecentByProfile()
+	if err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"by_profile": byProfile, "daily": daily, "recent": recent})
 }
 
 // pgLLMTasks returns distinct recorded tasks with counts, for the page's task

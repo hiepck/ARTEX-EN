@@ -193,6 +193,53 @@ type ProfileDayUsage struct {
 	CacheReadTokens int    `json:"cache_read_tokens"`
 }
 
+// ProfileRecentUsage is one profile's recent burn: calls and tokens over rolling
+// windows. This is the supply telemetry a hunt operator needs BEFORE a profile
+// dies with a 429 — the all-time UsageByProfile hides that a plan is being burned
+// down right now, and the breaker state only appears after the failure.
+type ProfileRecentUsage struct {
+	ProfileName string `json:"profile_name"`
+	Calls1h     int    `json:"calls_1h"`
+	Tokens1h    int    `json:"tokens_1h"`
+	Calls24h    int    `json:"calls_24h"`
+	Tokens24h   int    `json:"tokens_24h"`
+	Errors24h   int    `json:"errors_24h"`
+	Calls7d     int    `json:"calls_7d"`
+	Tokens7d    int    `json:"tokens_7d"`
+}
+
+// UsageRecentByProfile returns each profile's calls/tokens over the last hour,
+// day and week (UTC rolling windows), plus the 24h error count. Profiles with no
+// recent traffic are omitted so the list stays a burn view, not a museum.
+func (d *DB) UsageRecentByProfile() ([]ProfileRecentUsage, error) {
+	rows, err := d.Query(`
+SELECT COALESCE(profile_name,'') AS profile_name,
+       COUNT(*) FILTER (WHERE ts >= now() - interval '1 hour'),
+       COALESCE(SUM(input_tokens+output_tokens) FILTER (WHERE ts >= now() - interval '1 hour'),0),
+       COUNT(*) FILTER (WHERE ts >= now() - interval '24 hours'),
+       COALESCE(SUM(input_tokens+output_tokens) FILTER (WHERE ts >= now() - interval '24 hours'),0),
+       COUNT(*) FILTER (WHERE status='error' AND ts >= now() - interval '24 hours'),
+       COUNT(*) FILTER (WHERE ts >= now() - interval '7 days'),
+       COALESCE(SUM(input_tokens+output_tokens) FILTER (WHERE ts >= now() - interval '7 days'),0)
+FROM llm_usage
+WHERE ts >= now() - interval '7 days'
+GROUP BY profile_name
+ORDER BY COALESCE(SUM(input_tokens+output_tokens) FILTER (WHERE ts >= now() - interval '24 hours'),0) DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ProfileRecentUsage
+	for rows.Next() {
+		var u ProfileRecentUsage
+		if err := rows.Scan(&u.ProfileName, &u.Calls1h, &u.Tokens1h, &u.Calls24h, &u.Tokens24h, &u.Errors24h, &u.Calls7d, &u.Tokens7d); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 // UsageDaily returns per-(profile, day) token buckets for the past `days` days
 // (default 365 when days<=0), so the dashboard can slice by profile + range.
 func (d *DB) UsageDaily(days int) ([]ProfileDayUsage, error) {
