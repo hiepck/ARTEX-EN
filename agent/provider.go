@@ -308,9 +308,22 @@ func IsQuotaExhaustedMessage(message string) bool {
 	}
 	markers := []string{
 		"insufficient_quota", "quota_exceeded", "quota exceeded", "quota exhausted",
+		// "quota is exhausted" (with the copula) is what some gateways emit
+		// ("Coding Plan quota is exhausted and wallet balance is insufficient");
+		// the marker above only matches the copula-less form.
+		"quota is exhausted",
 		"exceeded your current quota", "billing_hard_limit_reached",
 		"billing hard limit", "billing_not_active", "credit balance", "insufficient credit",
 		"insufficient balance", "balance is too low", "payment required", "status 402",
+		// Plan-level exhaustion, not a transient rate limit: OpenCode Zen's Go plan
+		// answers 429 {"type":"GoUsageLimitError","message":"Go usage limit exceeded"}
+		// with limitName weekly, and its coding plan answers 402 with
+		// coding_plan_exhausted + "wallet balance is insufficient". Both mean "this
+		// account cannot serve another call until the plan resets", so failover must
+		// rotate off the profile — a 429 with a rate-limit phrase is filtered out
+		// above, so these markers cannot swallow an ordinary throttle.
+		"usage limit exceeded", "usage_limit_exceeded",
+		"coding_plan_exhausted", "insufficient_balance",
 		// Chinese markers are DATA, not UI text: these are the literal phrases Chinese LLM
 		// gateways (DeepSeek, Zhipu, Moonshot and the like) put in their error bodies when an
 		// account runs out of credit. Dropping them would stop failover from recognizing an

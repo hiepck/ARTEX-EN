@@ -26,6 +26,10 @@ func TestIsQuotaExhaustedMessage(t *testing.T) {
 		`credit balance is too low`,
 		// A real Chinese gateway's out-of-credit body; it must stay in Chinese because that is the literal text those providers return.
 		`账户余额不足，请充值`,
+		// The two real bodies that silently stopped failover on 2026-10-24/25: an
+		// OpenCode Zen Go plan weekly limit (429) and an exhausted coding plan (402).
+		`openai: status 429: {"type":"error","error":{"type":"GoUsageLimitError","message":"Go usage limit exceeded"},"metadata":{"workspace":"org_x","limitName":"weekly"}}`,
+		`openai: status 402: {"error":{"code":"insufficient_balance","details":{"coding_plan_exhausted":true,"reset_at":"2026-10-27T12:02:08Z"},"message":"[code=insufficient_balance] Coding Plan quota is exhausted and wallet balance is insufficient."}}`,
 	}
 	for _, message := range positive {
 		if !IsQuotaExhaustedMessage(message) {
@@ -47,6 +51,10 @@ func TestIsQuotaExhaustedMessage(t *testing.T) {
 		`status 500: internal server error`,
 		`status=503: insufficient_quota`,
 		`context length exceeded`,
+		// A transient throttle must never be classified as plan exhaustion: the new
+		// "usage limit" markers must not swallow ordinary rate-limit wording.
+		`status 429: rate limit exceeded, usage limit for this minute reached`,
+		`HTTP 429: too many requests — usage limit per minute exceeded`,
 	}
 	for _, message := range negative {
 		if IsQuotaExhaustedMessage(message) {
