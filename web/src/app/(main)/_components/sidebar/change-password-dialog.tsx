@@ -66,7 +66,7 @@ export function ChangePasswordDialog({
           <DialogHeader>
             <DialogTitle>Change the password</DialogTitle>
             <DialogDescription>
-              The username is fixed as <b>Penred</b>. The current password has to be entered to verify it; after the change, login tokens already issued stay valid until they expire.
+              The current password has to be entered to verify it; after the change, login tokens already issued stay valid until they expire.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 py-4">

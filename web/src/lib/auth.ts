@@ -1,4 +1,4 @@
-const TOKEN_KEY = "artex_token";
+const TOKEN_KEY = "oc_session";
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7 days (in seconds)
 
 export interface CurrentUser {
@@ -37,7 +37,7 @@ export const auth = {
       if (parts.length !== 3) return null;
       // base64url → base64
       const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-      const username: string = payload.sub ?? "Penred";
+      const username: string = payload.sub ?? "admin";
       return { id: "1", name: username, username, email: "", avatar: "", role: "operator" };
     } catch {
       return null;

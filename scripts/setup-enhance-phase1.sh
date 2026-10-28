@@ -6,7 +6,7 @@
 # Re-running updates in place; it never duplicates an MCP row or a binding.
 #
 #   ARTEX_URL             base URL (default http://127.0.0.1:8787)
-#   ARTEX_ADMIN_PASSWORD  admin password for user "Penred"  (required)
+#   ARTEX_ADMIN_PASSWORD  admin password for user "admin"  (required)
 #   WRITEUP_MCP_URL       writeup-search MCP endpoint (optional; skip if unset)
 #   BURP_MCP_URL          burp MCP endpoint          (optional; skip if unset)
 #   BURP_MCP_INSECURE     "1" to skip TLS verify for burp (optional)
@@ -14,15 +14,15 @@
 set -euo pipefail
 
 ARTEX_URL="${ARTEX_URL:-http://127.0.0.1:8787}"
-: "${ARTEX_ADMIN_PASSWORD:?set ARTEX_ADMIN_PASSWORD (the Penred admin password)}"
+: "${ARTEX_ADMIN_PASSWORD:?set ARTEX_ADMIN_PASSWORD (the admin password)}"
 
 command -v curl >/dev/null || { echo "curl not found" >&2; exit 2; }
 command -v jq   >/dev/null || { echo "jq not found" >&2; exit 2; }
 
-# --- login (username is Penred post-rebrand) ---
+# --- login (username is admin) ---
 login_resp=$(curl -fsS -X POST "$ARTEX_URL/api/auth/login" \
   -H 'Content-Type: application/json' \
-  -d "$(jq -cn --arg p "$ARTEX_ADMIN_PASSWORD" '{username:"Penred",password:$p}')") \
+  -d "$(jq -cn --arg p "$ARTEX_ADMIN_PASSWORD" '{username:"admin",password:$p}')") \
   || { echo "login request failed against $ARTEX_URL" >&2; exit 1; }
 TOKEN=$(printf '%s' "$login_resp" | jq -r '.token // empty')
 [ -n "$TOKEN" ] || { echo "login failed: no token returned" >&2; exit 1; }

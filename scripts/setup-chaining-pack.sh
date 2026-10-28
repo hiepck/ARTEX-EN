@@ -29,7 +29,7 @@ command -v jq   >/dev/null || { echo "jq not found" >&2; exit 2; }
 # --- login ---
 login_resp=$(curl -fsS -X POST "$ARTEX_URL/api/auth/login" \
   -H 'Content-Type: application/json' \
-  -d "$(jq -n --arg p "$ARTEX_ADMIN_PASSWORD" '{username:"Penred",password:$p}')") \
+  -d "$(jq -n --arg p "$ARTEX_ADMIN_PASSWORD" '{username:"admin",password:$p}')") \
   || { echo "login request failed against $ARTEX_URL" >&2; exit 1; }
 TOKEN=$(printf '%s' "$login_resp" | jq -r '.token // empty')
 [ -n "$TOKEN" ] || { echo "login failed: no token returned" >&2; exit 1; }

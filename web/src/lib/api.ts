@@ -108,7 +108,7 @@ import type {
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("artex_token");
+  return localStorage.getItem("oc_session");
 }
 
 export async function http<T>(path: string, init?: RequestInit): Promise<T> {
@@ -124,8 +124,8 @@ export async function http<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (r.status === 401) {
     if (typeof window !== "undefined") {
-      localStorage.removeItem("artex_token");
-      document.cookie = "artex_token=; path=/; max-age=0";
+      localStorage.removeItem("oc_session");
+      document.cookie = "oc_session=; path=/; max-age=0";
       window.location.href = "/login";
     }
     throw new Error("Unauthorized");
@@ -165,7 +165,7 @@ export async function http<T>(path: string, init?: RequestInit): Promise<T> {
 // Token is appended as ?token= because SSE can't carry cookies cross-origin.
 // mockReport returns a canned Markdown report for the demo.
 function mockReport(_task?: string): string {
-  return `# Penred penetration test report -- Acme Corp
+  return `# Internal security assessment report -- Acme Corp
 
 ## Overview
 - Scope: acme.com (including the www / admin / api / shop / vpn subdomains)

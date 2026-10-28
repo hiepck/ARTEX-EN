@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { auth } from "@/lib/auth";
 
+import { AuthCard } from "../_components/auth-card";
+
 export default function SetupPage() {
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -59,72 +61,71 @@ export default function SetupPage() {
     }
   }
 
-  if (checking) return null;
+  if (checking) {
+    return (
+      <div role="status" className="flex min-h-dvh items-center justify-center bg-slate-100 text-slate-500 text-sm">
+        Loading...
+      </div>
+    );
+  }
 
   return (
-    <div className="flex h-dvh">
-      {/* Left panel */}
-      <div className="hidden flex-col items-center justify-center bg-primary p-12 text-center lg:flex lg:w-1/3">
-        <div className="relative flex items-center justify-center">
-          <div className="absolute size-80 rounded-full border border-primary-foreground/10" />
-          <div className="absolute size-60 rounded-full border border-primary-foreground/15" />
-          <div className="absolute size-40 rounded-full border border-primary-foreground/20" />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="Penred" width={160} height={160} className="relative brightness-0 invert" />
+    <AuthCard
+      title={unavailable ? "Service unavailable" : "Set a password"}
+      subtitle={
+        unavailable
+          ? "The backend is temporarily unreachable, so setup is disabled to avoid overwriting an existing password."
+          : "This is the first run of this console. Choose a password (at least 8 characters)."
+      }
+    >
+      {unavailable ? (
+        <div className="space-y-4">
+          {error && <p className="text-center text-red-600 text-sm">{error}</p>}
+          <Button type="button" className="w-full bg-slate-900 text-white hover:bg-slate-800" onClick={() => window.location.reload()}>
+            Retry
+          </Button>
         </div>
-      </div>
-
-      {/* Right panel */}
-      <div className="flex w-full items-center justify-center bg-background p-8 lg:w-2/3">
-        <div className="w-full max-w-md space-y-10 py-24 lg:py-32">
-          <div className="space-y-4 text-center">
-            <h2 className="text-2xl font-medium tracking-tight">{unavailable ? "Cannot confirm initialization status" : "Set the password"}</h2>
-            <p className="mx-auto max-w-xl text-muted-foreground">
-              {unavailable
-                ? "The backend or database is temporarily unavailable. To avoid overwriting the password that already exists on this instance, the setup entry has been temporarily disabled — please restore the service and try again."
-                : "This is the first run of Penred; set a login password for the account (at least 8 characters)"}
-            </p>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="password" className="text-slate-700">
+              New password
+            </Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 8 characters"
+              autoFocus
+              autoComplete="new-password"
+              className="border-slate-300 bg-white"
+            />
           </div>
-          {unavailable ? (
-            <div className="flex flex-col gap-4">
-              {error && <p className="text-center text-sm text-destructive">{error}</p>}
-              <Button type="button" className="w-full" onClick={() => window.location.reload()}>
-                Retry
-              </Button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="password">New password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="at least 8 characters"
-                  autoFocus
-                  autoComplete="new-password"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="confirm">Confirm the password</Label>
-                <Input
-                  id="confirm"
-                  type="password"
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  placeholder="Type the password again"
-                  autoComplete="new-password"
-                />
-              </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={loading || !password || !confirm}>
-                {loading ? "Saving..." : "Set the password and sign in"}
-              </Button>
-            </form>
-          )}
-        </div>
-      </div>
-    </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="confirm" className="text-slate-700">
+              Confirm password
+            </Label>
+            <Input
+              id="confirm"
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder="Type the password again"
+              autoComplete="new-password"
+              className="border-slate-300 bg-white"
+            />
+          </div>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
+          <Button
+            type="submit"
+            className="w-full bg-slate-900 text-white hover:bg-slate-800"
+            disabled={loading || !password || !confirm}
+          >
+            {loading ? "Saving..." : "Set password and sign in"}
+          </Button>
+        </form>
+      )}
+    </AuthCard>
   );
 }

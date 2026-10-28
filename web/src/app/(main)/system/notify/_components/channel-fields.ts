@@ -108,7 +108,7 @@ export const CHANNEL_FIELDS: Record<string, FieldDef[]> = {
     },
     { key: "username", label: "Username", kind: "text" },
     { key: "password", label: "Password / app password", kind: "password" },
-    { key: "from", label: "From", kind: "text", placeholder: "artex@example.com" },
+    { key: "from", label: "From", kind: "text", placeholder: "noreply@example.com" },
     { key: "to", label: "To", kind: "list", help: "Separate several addresses with commas" },
     { key: "tls", label: "Implicit TLS", kind: "switch", help: "On for port 465; keep it off for 587 (which negotiates STARTTLS automatically)" },
   ],

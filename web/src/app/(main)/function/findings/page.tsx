@@ -65,7 +65,7 @@ import {
   UNASSIGNED_TASK,
 } from "./_components/findings-table";
 
-const FINDING_LIST_PREFERENCE_KEY = "artex_finding_list_preferences";
+const FINDING_LIST_PREFERENCE_KEY = "oc_finding_list_preferences";
 
 // The list view: flat = one big cross-task table (the default); grouped = collapsed by task;
 // asset = the asset tree on the left plus the findings under that subtree on the right.
